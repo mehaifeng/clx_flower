@@ -38,9 +38,9 @@ const petalMaterial = () => new THREE.MeshPhysicalMaterial({
   sheenColor: color('#ffe4eb'),
 });
 
-function leaf(length, width, seed = 1) {
+function leaf(length, width, seed = 1, tone = null) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: .71 });
-  const dark = color('#405b38'), light = color('#819a53');
+  const dark = color(tone || '#405b38'), light = tone ? dark.clone().lerp(color('#b9c98a'), .45) : color('#819a53');
   const geometry = surface((u, v) => {
     const s = (u * 2 - 1), envelope = Math.pow(Math.sin(v * Math.PI), .85);
     return new THREE.Vector3(s * width * envelope, Math.sin(v * Math.PI) * .1 + Math.abs(s) * .10 * envelope, v * length);
@@ -60,10 +60,13 @@ function leaf(length, width, seed = 1) {
   return group;
 }
 
-export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12} = {}) {
+export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12, parameters = null} = {}) {
   const root = new THREE.Group(), bloom = new THREE.Group(), petals = [];
   const rng = randomFor(seed || 12), base = color(tone);
-  const edge = base.clone().lerp(color('#fff5f1'), .40);
+  const p = parameters || {};
+  const length = clamp(p.length ?? 1,.7,1.18), width = clamp(p.width ?? 1,.65,1.25);
+  const openness = clamp(p.openness ?? 1,.5,1), curl = clamp(p.curl ?? 0,-.12,.25), leafSize = clamp(p.leafSize ?? 1,.7,1.2);
+  const edge = base.clone().lerp(color(p.edgeColor || '#fff5f1'), .40);
   const shadow = base.clone().multiplyScalar(.68);
   const material = petalMaterial();
   bloom.position.set(0,.62,0);
@@ -79,7 +82,9 @@ export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12
       {count:8,radius:.03,length:.36,width:.23,height:.83,base:.13,curl:-.02},
       {count:6,radius:0,length:.18,width:.16,height:.68,base:.20,curl:-.08},
     ];
-    rings.forEach((ring, ri) => {
+    rings.slice(0, Math.round(clamp(p.layers ?? 6,1,6))).forEach((original, ri) => {
+      const ring = {...original};
+      if(parameters){ring.count=Math.max(5,Math.round(clamp(p.petals ?? ring.count,5,22)*(1-ri*.065)));ring.length*=length*openness;ring.width*=width;ring.curl+=curl;}
       for (let n = 0; n < ring.count; n++) {
         const variation = rng(), asymmetry = rng() * .13 - .065;
         const geometry = surface((u,v) => {
@@ -106,31 +111,33 @@ export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12
       }
     });
   } else if (type === 'tulip') {
-    for(let ring=0;ring<2;ring++){
-      for(let i=0;i<3;i++){
+    const layerCount=Math.round(clamp(p.layers ?? 2,1,3)),petalCount=Math.round(clamp(p.petals ?? 3,3,8));
+    for(let ring=0;ring<layerCount;ring++){
+      for(let i=0;i<petalCount;i++){
         const geometry=surface((u,v)=>{
-          const s=(u*2-1),wid=Math.pow(Math.sin(v*Math.PI*.94),.55)*.48;
-          return new THREE.Vector3(s*wid, v*1.53 - s*s*.10*Math.sin(v*Math.PI), .08+Math.sin(v*Math.PI*.67)*.64 - s*s*.22);
+          const s=(u*2-1),wid=Math.pow(Math.sin(v*Math.PI*.94),.55)*.48*width;
+          return new THREE.Vector3(s*wid, v*1.53*length - s*s*.10*Math.sin(v*Math.PI)-curl*v*v*.4, .08+Math.sin(v*Math.PI*.67)*.64*openness - s*s*.22);
         },24,32,(u,v)=>shadow.clone().lerp(edge,.2+.68*v+Math.abs(u-.5)*.1));
         const mesh=new THREE.Mesh(geometry,material);
-        const pivot=new THREE.Group();pivot.rotation.y=i*Math.PI*2/3+ring*Math.PI/3;pivot.position.y=ring*.035;
+        const pivot=new THREE.Group();pivot.rotation.y=i*Math.PI*2/petalCount+ring*Math.PI/petalCount;pivot.position.y=ring*.035;
         pivot.add(mesh);bloom.add(pivot);petals.push({mesh,ring,phase:i});
       }
     }
     bloom.position.y=.48;bloom.rotation.x=.24;
   } else {
-    const white = base.clone().lerp(color('#fffefa'),.75), tint=base.clone().lerp(color('#fff4df'),.65);
-    for(let ring=0;ring<2;ring++){
-      for(let i=0;i<14;i++){
+    const white = base.clone().lerp(color('#fffefa'),parameters ? .18 : .75), tint=base.clone().lerp(color('#fff4df'),parameters ? .3 : .65);
+    const layerCount=Math.round(clamp(p.layers ?? 2,1,3)),petalCount=Math.round(clamp(p.petals ?? 14,8,22));
+    for(let ring=0;ring<layerCount;ring++){
+      for(let i=0;i<petalCount;i++){
         const geometry=surface((u,v)=>{
-          const s=u*2-1,w=Math.pow(Math.sin(v*Math.PI*.99),.64)*.14;
-          return new THREE.Vector3(s*w,.10+Math.sin(v*Math.PI)*.13-.10*Math.pow(v,3)+s*s*.08,.10+v*(.91-ring*.11));
+          const s=u*2-1,w=Math.pow(Math.sin(v*Math.PI*.99),.64)*.14*width;
+          return new THREE.Vector3(s*w,.10+Math.sin(v*Math.PI)*.13-(.10+curl)*Math.pow(v,3)+s*s*.08,.10+v*(.91-ring*.11)*length*openness);
         },12,22,(u,v)=>tint.clone().lerp(white,v*.85));
-        const mesh=new THREE.Mesh(geometry,material),pivot=new THREE.Group();pivot.rotation.y=i*Math.PI*2/14+ring*.21;pivot.position.y=ring*.03;
+        const mesh=new THREE.Mesh(geometry,material),pivot=new THREE.Group();pivot.rotation.y=i*Math.PI*2/petalCount+ring*.21;pivot.position.y=ring*.03;
         pivot.add(mesh);bloom.add(pivot);petals.push({mesh,ring,phase:i});
       }
     }
-    const center=new THREE.Mesh(new THREE.SphereGeometry(.28,24,14),new THREE.MeshStandardMaterial({color:'#d8a33f',roughness:.95}));
+    const center=new THREE.Mesh(new THREE.SphereGeometry(.28,24,14),new THREE.MeshStandardMaterial({color:p.centerColor || '#d8a33f',roughness:.95}));
     center.position.y=.16;center.scale.y=.5;bloom.add(center);
     const stamenGeometry=new THREE.SphereGeometry(.022,5,4),stamenMaterial=new THREE.MeshStandardMaterial({color:'#f3cc64',roughness:.8});
     for(let i=0;i<100;i++){
@@ -140,22 +147,44 @@ export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12
     bloom.rotation.x=.62;
   }
 
-  const stemPoints = [new THREE.Vector3(-.08,-2.04,0),new THREE.Vector3(.08,-1.28,.02),new THREE.Vector3(-.06,-.39,.03),new THREE.Vector3(0,.65,0)];
-  const stem=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(stemPoints),30,type==='tulip'?.042:.031,8,false),new THREE.MeshStandardMaterial({color:'#677b41',roughness:.7}));root.add(stem);
-  const left=leaf(type==='tulip'?1.6:1.12,type==='tulip'?.19:.31,seed);
+  const bend=clamp(p.stemBend ?? .08,-.24,.24);
+  const stemPoints = [new THREE.Vector3(-bend,-2.04,0),new THREE.Vector3(bend,-1.28,.02),new THREE.Vector3(-bend*.75,-.39,.03),new THREE.Vector3(0,.65,0)];
+  const stem=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(stemPoints),30,type==='tulip'?.042:.031,8,false),new THREE.MeshStandardMaterial({color:p.leafColor || '#677b41',roughness:.7}));root.add(stem);
+  const left=leaf((type==='tulip'?1.6:1.12)*leafSize,(type==='tulip'?.19:.31)*leafSize,seed,p.leafColor);
   left.position.set(.03,-1.33,.025);left.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(type==='tulip'?-.40:-.90,type==='tulip'?.91:.43,.10).normalize());root.add(left);
-  const right=leaf(type==='tulip'?1.32:.86,type==='tulip'?.17:.24,seed+1);
+  const right=leaf((type==='tulip'?1.32:.86)*leafSize,(type==='tulip'?.17:.24)*leafSize,seed+1,p.leafColor);
   right.position.set(-.02,-.71,.01);right.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(type==='tulip'?.44:.85,type==='tulip'?.88:.52,.15).normalize());root.add(right);
   if(type==='peony'){
-    const back=leaf(.65,.21,seed+4);back.position.set(-.02,-1.0,-.02);back.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(.45,.3,-.7).normalize());root.add(back);
+    const back=leaf(.65*leafSize,.21*leafSize,seed+4,p.leafColor);back.position.set(-.02,-1.0,-.02);back.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(.45,.3,-.7).normalize());root.add(back);
     const sepalMat=new THREE.MeshStandardMaterial({color:'#6b8051',roughness:.9,side:THREE.DoubleSide});
     for(let i=0;i<5;i++){
       const geometry=surface((u,v)=>new THREE.Vector3((u*2-1)*Math.sin(v*Math.PI)*.12,-.17+v*.03,v*.55),8,10);
       const sepal=new THREE.Mesh(geometry,sepalMat);sepal.rotation.y=i*Math.PI*2/5;bloom.add(sepal);
     }
   }
+  if(parameters){
+    const box=new THREE.Box3().setFromObject(root),size=box.getSize(new THREE.Vector3()),factor=Math.min(1,3.95/size.y,2.95/size.x);
+    const center=box.getCenter(new THREE.Vector3()),content=new THREE.Group();
+    for(const child of [...root.children])content.add(child);
+    content.position.copy(center).multiplyScalar(-factor);content.position.y-=.08;content.scale.setScalar(factor);root.add(content);
+  }
   root.userData={bloom,petals,type,baseRotation:bloom.rotation.x};
   return root;
+}
+
+export async function exportFlowerGLB(config){
+  const {GLTFExporter}=await import('./vendor/GLTFExporter.js');
+  const flower=createFlower(config);flower.name=config.name || 'A flower for Linxuan';
+  const normalVector=new THREE.Vector3();
+  flower.traverse(object=>{
+    object.userData={};
+    if(object.isLine)object.visible=false;
+    const normals=object.geometry?.getAttribute('normal');
+    if(normals){for(let i=0;i<normals.count;i++){normalVector.fromBufferAttribute(normals,i);if(normalVector.lengthSq()<1e-12)normalVector.set(0,1,0);else normalVector.normalize();normals.setXYZ(i,normalVector.x,normalVector.y,normalVector.z)}}
+  });
+  flower.userData={asset:'linxuan-garden-flower',version:1,type:config.type,color:config.color,seed:config.seed,parameters:config.parameters || null,species:config.species || '',creator:config.ai?.model || 'local-art'};
+  try{return await new GLTFExporter().parseAsync(flower,{binary:true,onlyVisible:true})}
+  finally{disposeTree(flower)}
 }
 
 function makeScene(){

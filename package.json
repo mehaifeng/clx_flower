@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node scripts/check.mjs",
+    "check": "node scripts/check.mjs && node scripts/check-ai.mjs",
     "dev": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist"
   }
 }

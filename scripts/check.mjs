@@ -7,8 +7,8 @@ import {execFileSync} from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const dist=resolve(root,'dist');
 const html=readFileSync(resolve(dist,'index.html'),'utf8');
-const css=readFileSync(resolve(dist,'style.css'),'utf8');
-const app=readFileSync(resolve(dist,'app.js'),'utf8');
+const css=readFileSync(resolve(dist,'style.css'),'utf8')+readFileSync(resolve(dist,'ai-settings.css'),'utf8');
+const app=readFileSync(resolve(dist,'app.js'),'utf8')+readFileSync(resolve(dist,'ai-settings.js'),'utf8');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);
 assert.equal(new Set(ids).size,ids.length,'HTML identifiers must be unique');
 for(const [,ref] of html.matchAll(/(?:src|href)="([^"]+)"/g)){
@@ -18,7 +18,8 @@ for(const [,ref] of html.matchAll(/(?:src|href)="([^"]+)"/g)){
 for(const [,ref] of css.matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g))assert(existsSync(resolve(dist,ref)),`Missing CSS asset ${ref}`);
 for(const [,id] of app.matchAll(/\$\(['"]#([\w-]+)['"]/g))assert(ids.includes(id),`Missing interaction element #${id}`);
 for(const [,value] of html.matchAll(/(?:aria-labelledby|aria-controls)="([^"]+)"/g))for(const ref of value.split(' '))assert(ids.includes(ref),`Missing accessibility reference ${ref}`);
-for(const file of ['app.js','flower.js','vendor/three.module.js'])execFileSync(process.execPath,['--check',resolve(dist,file)]);
+for(const file of ['app.js','flower.js','ai.js','ai-settings.js','vendor/GLTFExporter.js','vendor/three.module.js'])execFileSync(process.execPath,['--check',resolve(dist,file)]);
+assert(!html.includes('情书'),'Letter wording should consistently use 信笺');
 assert(html.includes('width=device-width, initial-scale=1, viewport-fit=cover'),'Mobile viewport must remain enabled');
 assert(css.includes('prefers-reduced-motion'),'Reduced-motion treatment must remain available');
 console.log('PASS · HTML references, interaction hooks, assets, accessibility links and JavaScript syntax');

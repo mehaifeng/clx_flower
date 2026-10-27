@@ -1,4 +1,6 @@
-import { FlowerScene, getThumbnail, analysePhoto } from './flower.js';
+import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js';
+import { generateFlowerAsset, AIError } from './ai.js';
+import { createAISettings } from './ai-settings.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -13,8 +15,33 @@ const gifts = [
 let flowers = [], database, storageAvailable = true, activeFilter = 'all';
 let heroWorld, detailWorld, selectedId, photoSource = null, photoIsDemo = false, cameraStream = null;
 let toastTimer, undoAction, thumbnailAvailable = true, processing = false, systemCameraFallback = false;
+let generationController = null;
 const captureDialog = $('#capture-dialog'), detailDialog = $('#detail-dialog'), loveDialog = $('#love-dialog');
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const aiSettings = createAISettings({notify, onOpen: lockScroll, onClose: unlockScroll, onChange: config => {
+  $('#use-ai').checked = !!config;
+  $('#flower-type').value = config ? 'auto' : 'peony';
+  $('#ai-ready-dot').hidden = !config;
+  syncCreationMode();
+}});
+
+function syncCreationMode(){
+  const enabled=$('#use-ai').checked,config=aiSettings.getConfig(),ready=aiSettings.isReady();
+  $('#flower-type option[value="auto"]').disabled=!enabled;
+  if(!enabled&&$('#flower-type').value==='auto')$('#flower-type').value='peony';
+  $('#capture-ai-settings span').textContent=ready?'模型已就绪 · 设置':'配置视觉模型';
+  $('#creation-service').textContent=enabled?(ready?`照片将发送至 ${config.baseUrl}，使用 ${config.model} 创作。`:'请先配置并验证视觉模型，再生成 3D 藏品。'):'本机艺术建模，不上传照片。';
+  $('#creation-service').classList.toggle('attention',enabled&&!ready);
+  if(!processing)$('#generate-button span').textContent=enabled?'AI 生成 3D 并入藏':'生成 3D 并入藏';
+}
+$('#use-ai').addEventListener('change',()=>{if($('#use-ai').checked)$('#flower-type').value='auto';syncCreationMode()});
+
+function captureBusy(value){
+  for(const id of ['flower-name','flower-note','flower-type','use-ai','capture-ai-settings','retake-photo','generate-button'])$('#'+id).disabled=value;
+  $('#cancel-generation').hidden=!value;
+  $('#capture-form').setAttribute('aria-busy',String(value));
+}
+$('#cancel-generation').addEventListener('click',()=>generationController?.abort());
 
 function notify(message, undo = null) {
   clearTimeout(toastTimer);undoAction = undo;
@@ -99,10 +126,10 @@ function renderCollection(){
     $('.card-number',card).textContent=String(index+1).padStart(2,'0');
     $('.card-visual',card).setAttribute('aria-label',`赏玩${record.name}的 3D 鲜花`);
     const image=$('img',card);image.src=record.thumb||thumbnail(record);image.alt=record.name;
-    $('.card-tag',card).textContent=record.gift?'A GIFT FOR YOU':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
+    $('.card-tag',card).textContent=record.gift?'A GIFT FOR YOU':record.ai?'VISION / 3D ART':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
     const heart=$('.card-favorite',card);heart.setAttribute('aria-pressed',String(!!record.favorite));heart.setAttribute('aria-label',`${record.favorite?'取消心动':'记下心动'}：${record.name}`);
     $('.card-title',card).textContent=record.name;$('.card-date',card).textContent=dateLabel(record);
-    $('.card-subtitle',card).textContent=`${typeNames[record.type]||'鲜花'} · ${typeLatin[record.type]||'Flower'}`;
+    $('.card-subtitle',card).textContent=`${record.species||typeNames[record.type]||'鲜花'} · ${record.ai?'AI 视觉创作':typeLatin[record.type]||'Flower'}`;
     $('.card-visual',card).addEventListener('click',()=>openDetail(record.id));heart.addEventListener('click',()=>toggleFavorite(record.id));grid.append(card);
   });
 }
@@ -127,9 +154,9 @@ function unlockScroll(){if(!$$('dialog[open]').length){document.body.style.overf
 function openDetail(id){
   const record=flowers.find(f=>f.id===id);if(!record){notify('花朵还在慢慢醒来，请再试一次。');return}
   selectedId=id;detailWorld?.dispose();detailWorld=null;$('#detail-scene').replaceChildren();
-  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${typeNames[record.type]||'鲜花'} / ${(typeLatin[record.type]||'FLOWER').toUpperCase()}`;
+  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${record.species||typeNames[record.type]||'鲜花'} / ${record.ai?'VISION / 3D ART':(typeLatin[record.type]||'FLOWER').toUpperCase()}`;
   $('#detail-note').textContent=record.note||'这一刻的心动，想替你好好留着。';
-  $('#detail-date').textContent=record.gift?'花园赠礼 · 只为你盛开':`${record.demo?'示例采集':'亲手采集'} · ${new Date(record.createdAt).toLocaleDateString('zh-CN')}`;
+  $('#detail-date').textContent=record.gift?'花园赠礼 · 只为你盛开':`${record.ai?'AI 视觉创作':record.demo?'示例采集':'亲手采集'} · ${new Date(record.createdAt).toLocaleDateString('zh-CN')}`;
   $('#remove-flower').hidden=!!record.gift;$('#original-photo').hidden=!record.photo;$('#original-photo').open=false;
   $('#original-photo-image').src=record.photo||'';updateDetailFavorite(record);
   if(!detailDialog.open)detailDialog.showModal();lockScroll();
@@ -159,8 +186,9 @@ function captureStatus(message,error=false){$('#capture-status').textContent=mes
 function stopCamera(){if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null}$('#camera-video').srcObject=null;$('#camera-video').hidden=true;$('#shutter-button').hidden=true}
 function resetCapture(){
   stopCamera();photoSource=null;photoIsDemo=false;$('#capture-form').hidden=true;$('#photo-source-actions').hidden=false;$('#capture-empty').hidden=false;$('#photo-preview').hidden=true;$('#photo-preview').removeAttribute('src');$('#flower-name').value='今日的小心动';$('#flower-note').value='';$('#flower-type').value='peony';captureStatus('');$('#generate-button').disabled=false;$('#generate-button span').textContent='生成 3D 并入藏';$('#photo-input').value='';$('#camera-input').value='';
+  captureBusy(false);$('#use-ai').checked=aiSettings.isReady();if(aiSettings.isReady())$('#flower-type').value='auto';syncCreationMode();
 }
-captureDialog.addEventListener('close',()=>{stopCamera();unlockScroll()});
+captureDialog.addEventListener('close',()=>{stopCamera();generationController?.abort();unlockScroll()});
 $('#start-camera').addEventListener('click',async()=>{
   if(systemCameraFallback||!navigator.mediaDevices?.getUserMedia){captureStatus('将使用设备的系统相机，也可以从相册选择。');$('#camera-input').click();return}
   const button=$('#start-camera');button.disabled=true;captureStatus('正在打开相机，请允许相机权限…');
@@ -177,6 +205,7 @@ function fittedCanvas(image,max=900){const scale=Math.min(1,max/Math.max(image.w
 function setPhoto(source,demo=false){
   stopCamera();photoSource=source;photoIsDemo=demo;$('#photo-preview').src=source;$('#photo-preview').hidden=false;$('#capture-empty').hidden=true;$('#photo-source-actions').hidden=true;$('#capture-form').hidden=false;
   $('#flower-name').value=demo?'晨光里的温柔（示例）':'今日的小心动';captureStatus(demo?'示例已就绪。选一种姿态，看看花怎样再次盛开。':'已留住这一刻。给这朵花一个名字吧。');
+  syncCreationMode();
 }
 $('#shutter-button').addEventListener('click',()=>{const video=$('#camera-video');if(!video.videoWidth)return;const canvas=fittedCanvas(video);setPhoto(canvas.toDataURL('image/jpeg',.84))});
 async function loadFile(file){
@@ -196,16 +225,35 @@ $('#try-demo').addEventListener('click',async()=>{
 $('#capture-form').addEventListener('submit',async event=>{
   event.preventDefault();if(!photoSource||processing)return;
   const name=$('#flower-name').value.trim();if(!name){$('#flower-name').focus();captureStatus('为这份心动取个名字吧。',true);return}
-  processing=true;const button=$('#generate-button');button.disabled=true;button.querySelector('span').textContent='正在让它盛开…';$('#retake-photo').disabled=true;
+  if(!storageAvailable||!database){captureStatus('浏览器储存暂时不可用，请在普通浏览模式下重试；本次没有调用模型。',true);return}
+  const useAI=$('#use-ai').checked,config=aiSettings.getConfig();
+  if(useAI&&!aiSettings.isReady()){captureStatus('请先在 AI 创作设置中验证视觉模型。',true);aiSettings.open();return}
+  const source=photoSource,typeHint=$('#flower-type').value,note=$('#flower-note').value.trim(),demo=photoIsDemo;
+  generationController=new AbortController();const controller=generationController;
+  processing=true;captureBusy(true);const button=$('#generate-button');button.querySelector('span').textContent='正在让它盛开…';
   try{
-    captureStatus('01 / 正在拾取花朵的颜色…');await frame();
-    const analysis=await analysePhoto(photoSource);
-    const record={id:crypto.randomUUID?.()||`flower-${Date.now()}-${Math.random().toString(36).slice(2)}`,name,note:$('#flower-note').value.trim(),type:$('#flower-type').value,...analysis,createdAt:Date.now(),favorite:false,gift:false,demo:photoIsDemo,photo:photoSource};
+    captureStatus(useAI?'01 / 视觉模型正在读懂花色与姿态…':'01 / 正在拾取花朵的颜色…');await frame();
+    const recipe=useAI?await generateFlowerAsset(config,source,{signal:controller.signal,typeHint}):{...await analysePhoto(source),type:typeHint==='auto'?'peony':typeHint};
+    if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
+    const {suggestedName,suggestedNote,...asset}=recipe;
+    const record={...asset,id:crypto.randomUUID?.()||`flower-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:useAI&&name==='今日的小心动'?suggestedName:name,note:note||suggestedNote||'',createdAt:Date.now(),favorite:false,gift:false,demo,photo:source};
     captureStatus('02 / 正在塑成一朵立体的花…');await frame();await frame();record.thumb=thumbnail(record);
+    if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
+    $('#cancel-generation').hidden=true;
     captureStatus('03 / 正在把心动放进藏花阁…');await saveRecord(record);flowers.push(record);setFilter('all');
     const showResult=captureDialog.open;captureDialog.close();if(showResult)openDetail(record.id);petals(innerWidth*.5,innerHeight*.36);notify(`${record.demo?'示例花朵':'这朵心动'}，已珍藏在这台设备的小花园。`);
-  }catch(error){captureStatus(error.name==='QuotaExceededError'?'设备储存空间不足，这朵花还没有保存，请释放一些空间后重试。':error.message||'花朵还没有保存成功，请再试一次。',true)}
-  finally{processing=false;button.disabled=false;$('#retake-photo').disabled=false;button.querySelector('span').textContent='生成 3D 并入藏'}
+  }catch(error){captureStatus(error.name==='QuotaExceededError'?'设备储存空间不足，这朵花还没有保存，请释放一些空间后重试。':error.message||'花朵还没有保存成功，请再试一次。',error.code!=='aborted')}
+  finally{if(generationController===controller)generationController=null;processing=false;captureBusy(false);syncCreationMode()}
+});
+
+$('#export-3d').addEventListener('click',async()=>{
+  const record=flowers.find(f=>f.id===selectedId);if(!record)return;
+  const button=$('#export-3d');button.disabled=true;
+  try{
+    const buffer=await exportFlowerGLB(record),blob=new Blob([buffer],{type:'model/gltf-binary'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=`予你花园-${record.name.replace(/[\\/:*?"<>|]/g,'')}.glb`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notify('3D 花卉资产已导出，可在支持 GLB 的软件中打开。');
+  }catch{notify('3D 资产暂时没有导出成功，请稍后重试。')}
+  finally{button.disabled=false}
 });
 
 function drawWrapped(ctx,text,x,y,maxWidth,lineHeight,maxLines=5){
