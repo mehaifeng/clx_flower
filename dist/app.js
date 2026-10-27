@@ -1,6 +1,6 @@
-import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js';
-import { generateFlowerAsset, AIError } from './ai.js';
-import { createAISettings } from './ai-settings.js';
+import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js?v=ai-2';
+import { generateFlowerAsset, AIError } from './ai.js?v=ai-2';
+import { createAISettings } from './ai-settings.js?v=ai-2';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];

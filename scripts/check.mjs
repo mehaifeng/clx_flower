@@ -13,9 +13,11 @@ const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]);
 assert.equal(new Set(ids).size,ids.length,'HTML identifiers must be unique');
 for(const [,ref] of html.matchAll(/(?:src|href)="([^"]+)"/g)){
   if(ref.startsWith('#'))assert(ids.includes(ref.slice(1)),`Missing anchor ${ref}`);
-  else if(!/^(https?:|data:)/.test(ref))assert(existsSync(resolve(dist,ref)),`Missing asset ${ref}`);
+  else if(!/^(https?:|data:)/.test(ref))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing asset ${ref}`);
 }
-for(const [,ref] of css.matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g))assert(existsSync(resolve(dist,ref)),`Missing CSS asset ${ref}`);
+for(const [,ref] of css.matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing CSS asset ${ref}`);
+for(const [,ref] of app.matchAll(/from ['"]([^'"]+)['"]/g))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing module ${ref}`);
+const aiVersions=[...app.matchAll(/from ['"]\.\/ai\.js([^'"]*)['"]/g)].map(match=>match[1]);assert.equal(new Set(aiVersions).size,1,'AI settings and generation must share one module instance');
 for(const [,id] of app.matchAll(/\$\(['"]#([\w-]+)['"]/g))assert(ids.includes(id),`Missing interaction element #${id}`);
 for(const [,value] of html.matchAll(/(?:aria-labelledby|aria-controls)="([^"]+)"/g))for(const ref of value.split(' '))assert(ids.includes(ref),`Missing accessibility reference ${ref}`);
 for(const file of ['app.js','flower.js','ai.js','ai-settings.js','vendor/GLTFExporter.js','vendor/three.module.js'])execFileSync(process.execPath,['--check',resolve(dist,file)]);

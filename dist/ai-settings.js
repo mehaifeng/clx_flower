@@ -1,4 +1,4 @@
-import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js';
+import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js?v=ai-2';
 
 export function createAISettings({notify, onChange, onOpen, onClose}) {
   const $ = selector => document.querySelector(selector);
