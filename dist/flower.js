@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import {buildGeneratedFlower, fitGeneratedCamera} from './geometry.js?v=geometry-3';
 
 const clamp = THREE.MathUtils.clamp;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -60,7 +61,9 @@ function leaf(length, width, seed = 1, tone = null) {
   return group;
 }
 
-export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12, parameters = null} = {}) {
+export function createFlower({type = 'peony', color: tone = '#e7a0b4', seed = 12, parameters = null, geometry = null} = {}) {
+  if(geometry)return buildGeneratedFlower(geometry);
+  if(type==='generated')throw new Error('独立几何资产缺少结构数据，不能用预置花朵替代。');
   const root = new THREE.Group(), bloom = new THREE.Group(), petals = [];
   const rng = randomFor(seed || 12), base = color(tone);
   const p = parameters || {};
@@ -182,7 +185,7 @@ export async function exportFlowerGLB(config){
     const normals=object.geometry?.getAttribute('normal');
     if(normals){for(let i=0;i<normals.count;i++){normalVector.fromBufferAttribute(normals,i);if(normalVector.lengthSq()<1e-12)normalVector.set(0,1,0);else normalVector.normalize();normals.setXYZ(i,normalVector.x,normalVector.y,normalVector.z)}}
   });
-  flower.userData={asset:'linxuan-garden-flower',version:1,type:config.type,color:config.color,seed:config.seed,parameters:config.parameters || null,species:config.species || '',creator:config.ai?.model || 'local-art'};
+  flower.userData={asset:'linxuan-garden-flower',version:config.geometry?2:1,type:config.type,color:config.color,seed:config.seed,parameters:config.parameters || null,geometryHash:config.geometryHash || null,geometryStats:config.geometryStats || null,species:config.species || '',creator:config.ai?.model || 'local-art'};
   try{return await new GLTFExporter().parseAsync(flower,{binary:true,onlyVisible:true})}
   finally{disposeTree(flower)}
 }
@@ -216,6 +219,7 @@ export function getThumbnail(config,width=480,height=540){
   scene.add(flower);flower.rotation.y=-.19;
   const camera=new THREE.PerspectiveCamera(32,width/height,.1,50);
   camera.position.set(0,1.8,config.type==='tulip'?8.5:7.8);camera.lookAt(0,-.12,0);
+  if(config.geometry)fitGeneratedCamera(camera,flower);
   thumbnailRenderer.setSize(width,height,false);thumbnailRenderer.render(scene,camera);
   const result=thumbnailRenderer.domElement.toDataURL('image/png');
   disposeTree(flower);return result;
@@ -224,6 +228,7 @@ export function getThumbnail(config,width=480,height=540){
 export class FlowerScene {
   constructor(container,config={},options={}){
     this.container=container;this.options=options;this.disposed=false;this.visible=true;
+    this.customGeometry=!!config.geometry;
     this.renderer=makeRenderer(true);this.renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.7));
     this.canvas=this.renderer.domElement;this.canvas.setAttribute('role','img');this.canvas.setAttribute('aria-label','可旋转、绽放的 3D 鲜花');
     this.container.append(this.canvas);this.scene=makeScene();this.flower=createFlower(config);this.scene.add(this.flower);
@@ -245,6 +250,7 @@ export class FlowerScene {
     const width=this.container.clientWidth,height=this.container.clientHeight;if(!width||!height)return;
     this.renderer.setSize(width,height,false);this.camera.aspect=width/height;this.camera.updateProjectionMatrix();
     if(!this.options.detail){this.flower.scale.setScalar(width<420?.92:1.05)}
+    if(this.customGeometry)fitGeneratedCamera(this.camera,this.flower);
   }
   pointerDown(e){
     this.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -291,7 +297,10 @@ export class FlowerScene {
     this.flower.rotation.z=reducedMotion?0:Math.sin(time*.65)*.012;
     this.flower.position.y=reducedMotion?0:Math.sin(time*.85)*.025;
     const data=this.flower.userData;
-    for(const petal of data.petals){petal.mesh.rotation.x=-(1-this.bloom)*(.72-petal.ring*.065);petal.mesh.scale.x=.65+.35*this.bloom}
+    for(const petal of data.petals){
+      if(petal.freeform){petal.mesh.rotation.copy(petal.restRotation);petal.mesh.rotateX(-(1-this.bloom)*.28);petal.mesh.scale.copy(petal.restScale).multiplyScalar(.86+.14*this.bloom)}
+      else{petal.mesh.rotation.x=-(1-this.bloom)*(.72-petal.ring*.065);petal.mesh.scale.x=.65+.35*this.bloom}
+    }
     data.bloom.rotation.x=data.baseRotation+this.scrollProgress*.18;
     this.camera.zoom=this.zoom;this.camera.updateProjectionMatrix();
     for(let i=this.flying.length-1;i>=0;i--){

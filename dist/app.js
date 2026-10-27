@@ -1,6 +1,6 @@
-import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js?v=ai-2';
-import { generateFlowerAsset, AIError } from './ai.js?v=ai-2';
-import { createAISettings } from './ai-settings.js?v=ai-2';
+import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js?v=geometry-3';
+import { generateFlowerAsset, AIError } from './ai.js?v=geometry-3';
+import { createAISettings } from './ai-settings.js?v=geometry-3';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -28,9 +28,11 @@ const aiSettings = createAISettings({notify, onOpen: lockScroll, onClose: unlock
 function syncCreationMode(){
   const enabled=$('#use-ai').checked,config=aiSettings.getConfig(),ready=aiSettings.isReady();
   $('#flower-type option[value="auto"]').disabled=!enabled;
+  $('#local-flower-type-label').hidden=enabled;
+  $('#local-flower-type-label').parentElement.classList.toggle('ai-freeform',enabled);
   if(!enabled&&$('#flower-type').value==='auto')$('#flower-type').value='peony';
   $('#capture-ai-settings span').textContent=ready?'模型已就绪 · 设置':'配置视觉模型';
-  $('#creation-service').textContent=enabled?(ready?`照片将发送至 ${config.baseUrl}，使用 ${config.model} 创作。`:'请先配置并验证视觉模型，再生成 3D 藏品。'):'本机艺术建模，不上传照片。';
+  $('#creation-service').textContent=enabled?(ready?`使用 ${config.model} 定义独立曲面与空间结构，花照发送至 ${config.baseUrl}。`:'请先配置并验证视觉模型，再生成独立几何结构。'):'本机模式使用预置花型取色建模，不上传照片。';
   $('#creation-service').classList.toggle('attention',enabled&&!ready);
   if(!processing)$('#generate-button span').textContent=enabled?'AI 生成 3D 并入藏':'生成 3D 并入藏';
 }
@@ -95,6 +97,7 @@ async function deleteRecord(id){
   return new Promise((resolve,reject)=>{const tx=database.transaction('flowers','readwrite');tx.objectStore('flowers').delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)});
 }
 function fallbackThumbnail(config){
+  if(config.geometry)return config.photo||'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 540"><text x="240" y="265" text-anchor="middle" fill="#82916e" font-size="18">3D 结构已保留</text><text x="240" y="300" text-anchor="middle" fill="#9ba68a" font-size="12">当前设备暂不支持立体预览</text></svg>');
   const petals=Array.from({length:config.type==='tulip'?5:12},(_,i)=>`<ellipse cx="240" cy="170" rx="${config.type==='tulip'?50:30}" ry="100" fill="${/^#[0-9a-f]{6}$/i.test(config.color)?config.color:'#e7b0bd'}" stroke="#fff8" transform="rotate(${i*(config.type==='tulip'?20:30)} 240 220)"/>`).join('');
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 540"><path d="M240 250Q255 380 230 490M242 390Q140 300 165 365Q180 430 242 390M240 425Q330 325 310 390Q290 450 240 425" fill="#819568" stroke="#819568" stroke-width="6"/>${petals}<circle cx="240" cy="220" r="25" fill="#d7b570"/></svg>`);
 }
@@ -126,10 +129,10 @@ function renderCollection(){
     $('.card-number',card).textContent=String(index+1).padStart(2,'0');
     $('.card-visual',card).setAttribute('aria-label',`赏玩${record.name}的 3D 鲜花`);
     const image=$('img',card);image.src=record.thumb||thumbnail(record);image.alt=record.name;
-    $('.card-tag',card).textContent=record.gift?'A GIFT FOR YOU':record.ai?'VISION / 3D ART':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
+    $('.card-tag',card).textContent=record.geometry?'MODEL-AUTHORED / 3D':record.gift?'A GIFT FOR YOU':record.ai?'LEGACY / TEMPLATE':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
     const heart=$('.card-favorite',card);heart.setAttribute('aria-pressed',String(!!record.favorite));heart.setAttribute('aria-label',`${record.favorite?'取消心动':'记下心动'}：${record.name}`);
     $('.card-title',card).textContent=record.name;$('.card-date',card).textContent=dateLabel(record);
-    $('.card-subtitle',card).textContent=`${record.species||typeNames[record.type]||'鲜花'} · ${record.ai?'AI 视觉创作':typeLatin[record.type]||'Flower'}`;
+    $('.card-subtitle',card).textContent=`${record.species||typeNames[record.type]||'鲜花'} · ${record.geometry?'独立几何生成':record.ai?'旧版花型调参':typeLatin[record.type]||'Flower'}`;
     $('.card-visual',card).addEventListener('click',()=>openDetail(record.id));heart.addEventListener('click',()=>toggleFavorite(record.id));grid.append(card);
   });
 }
@@ -154,11 +157,20 @@ function unlockScroll(){if(!$$('dialog[open]').length){document.body.style.overf
 function openDetail(id){
   const record=flowers.find(f=>f.id===id);if(!record){notify('花朵还在慢慢醒来，请再试一次。');return}
   selectedId=id;detailWorld?.dispose();detailWorld=null;$('#detail-scene').replaceChildren();
-  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${record.species||typeNames[record.type]||'鲜花'} / ${record.ai?'VISION / 3D ART':(typeLatin[record.type]||'FLOWER').toUpperCase()}`;
+  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${record.species||typeNames[record.type]||'鲜花'} / ${record.geometry?'SPATIAL GEOMETRY':record.ai?'LEGACY / TEMPLATE':(typeLatin[record.type]||'FLOWER').toUpperCase()}`;
   $('#detail-note').textContent=record.note||'这一刻的心动，想替你好好留着。';
   $('#detail-date').textContent=record.gift?'花园赠礼 · 只为你盛开':`${record.ai?'AI 视觉创作':record.demo?'示例采集':'亲手采集'} · ${new Date(record.createdAt).toLocaleDateString('zh-CN')}`;
   $('#remove-flower').hidden=!!record.gift;$('#original-photo').hidden=!record.photo;$('#original-photo').open=false;
   $('#original-photo-image').src=record.photo||'';updateDetailFavorite(record);
+  $('#asset-origin').hidden=!record.ai&&!record.geometry;
+  $('#asset-origin').textContent=record.geometry?'这朵花的曲面控制点、空间路径与部件位置由视觉模型定义，未使用预置花型。':'这是旧版「预置花型调参」资产，可用原照重新生成独立结构。';
+  $('#geometry-inspector').hidden=!record.geometry;$('#geometry-inspector').open=false;
+  $('#regenerate-geometry').hidden=!record.photo||!record.ai||!!record.geometry;
+  $('#geometry-json').textContent=record.geometry?JSON.stringify(record.geometry,null,2):'';
+  $('#geometry-description').textContent=record.shapeDescription||'';
+  const stats=record.geometryStats||{};
+  $('#geometry-stats').textContent=record.geometry?`${stats.surfaces||0} 个独立曲面 · ${stats.paths||0} 条空间路径 · ${stats.customMeshes||0} 个自定义网格 · ${stats.instances||0} 个部件实例 · ${(stats.vertices||0).toLocaleString()} 个顶点`:'';
+  $('#geometry-fingerprint').textContent=record.geometryHash?`结构指纹 · ${record.geometryHash.slice(0,20)}`:'';
   if(!detailDialog.open)detailDialog.showModal();lockScroll();
   try{detailWorld=new FlowerScene($('#detail-scene'),record,{detail:true});$('.detail-controls span').textContent='左右拖动旋转 · 双指缩放'}
   catch(error){const img=new Image();img.src=record.thumb||fallbackThumbnail(record);img.alt=record.name;img.style.cssText='width:100%;height:100%;object-fit:contain';$('#detail-scene').append(img);$('.detail-controls span').textContent='当前设备使用静态预览，3D 参数已保留';console.warn(error.message)}
@@ -233,17 +245,31 @@ $('#capture-form').addEventListener('submit',async event=>{
   processing=true;captureBusy(true);const button=$('#generate-button');button.querySelector('span').textContent='正在让它盛开…';
   try{
     captureStatus(useAI?'01 / 视觉模型正在读懂花色与姿态…':'01 / 正在拾取花朵的颜色…');await frame();
-    const recipe=useAI?await generateFlowerAsset(config,source,{signal:controller.signal,typeHint}):{...await analysePhoto(source),type:typeHint==='auto'?'peony':typeHint};
+    const recipe=useAI?await generateFlowerAsset(config,source,{signal:controller.signal}):{...await analysePhoto(source),type:typeHint==='auto'?'peony':typeHint};
     if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
     const {suggestedName,suggestedNote,...asset}=recipe;
     const record={...asset,id:crypto.randomUUID?.()||`flower-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:useAI&&name==='今日的小心动'?suggestedName:name,note:note||suggestedNote||'',createdAt:Date.now(),favorite:false,gift:false,demo,photo:source};
-    captureStatus('02 / 正在塑成一朵立体的花…');await frame();await frame();record.thumb=thumbnail(record);
+    captureStatus(useAI?'02 / 正在将独立曲面与空间路径构成网格…':'02 / 正在塑成一朵立体的花…');await frame();await frame();record.thumb=thumbnail(record);
     if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
     $('#cancel-generation').hidden=true;
     captureStatus('03 / 正在把心动放进藏花阁…');await saveRecord(record);flowers.push(record);setFilter('all');
     const showResult=captureDialog.open;captureDialog.close();if(showResult)openDetail(record.id);petals(innerWidth*.5,innerHeight*.36);notify(`${record.demo?'示例花朵':'这朵心动'}，已珍藏在这台设备的小花园。`);
   }catch(error){captureStatus(error.name==='QuotaExceededError'?'设备储存空间不足，这朵花还没有保存，请释放一些空间后重试。':error.message||'花朵还没有保存成功，请再试一次。',error.code!=='aborted')}
   finally{if(generationController===controller)generationController=null;processing=false;captureBusy(false);syncCreationMode()}
+});
+
+$('#regenerate-geometry').addEventListener('click',async()=>{
+  const record=flowers.find(f=>f.id===selectedId);if(!record?.photo)return;
+  detailDialog.close();await openCapture();setPhoto(record.photo,!!record.demo);
+  $('#flower-name').value=record.name;$('#flower-note').value=record.note||'';$('#use-ai').checked=true;syncCreationMode();
+  captureStatus('原始照片已带入。此次将生成独立几何结构，旧藏品会保留。');
+});
+
+$('#export-geometry').addEventListener('click',()=>{
+  const record=flowers.find(f=>f.id===selectedId);if(!record?.geometry)return;
+  const data={version:2,name:record.name,species:record.species,shapeDescription:record.shapeDescription,geometryHash:record.geometryHash,geometryStats:record.geometryStats,geometry:record.geometry};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),link=document.createElement('a');
+  link.href=url;link.download=`予你花园-${record.name.replace(/[\\/:*?"<>|]/g,'')}-geometry.json`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notify('已导出这朵花的独立几何结构。');
 });
 
 $('#export-3d').addEventListener('click',async()=>{
@@ -270,7 +296,7 @@ $('#export-flower').addEventListener('click',async()=>{
     ctx.fillStyle='#82926e';ctx.textAlign='center';ctx.font='15px Arial';ctx.letterSpacing='4px';ctx.fillText('A LITTLE GARDEN, JUST FOR LINXUAN',500,105);
     const image=new Image();image.src=record.thumb||thumbnail(record);await image.decode();ctx.drawImage(image,180,130,640,720);
     ctx.fillStyle='#385341';ctx.font='42px GardenSerif, serif';ctx.letterSpacing='3px';ctx.fillText(record.name,500,920);
-    ctx.fillStyle='#819271';ctx.font='17px Arial';ctx.letterSpacing='2px';ctx.fillText(`${typeNames[record.type]} · ${typeLatin[record.type]}`,500,965);
+    ctx.fillStyle='#819271';ctx.font='17px Arial';ctx.letterSpacing='2px';ctx.fillText(`${record.species||typeNames[record.type]||'鲜花'} · ${record.geometry?'独立几何生成':typeLatin[record.type]||'Flower'}`,500,965);
     ctx.font='24px GardenSerif, serif';ctx.fillStyle='#7c8971';ctx.letterSpacing='1px';drawWrapped(ctx,record.note||'花有花期，喜欢你没有。',500,1040,760,42,4);
     ctx.strokeStyle='#dce2d1';ctx.beginPath();ctx.moveTo(350,1223);ctx.lineTo(650,1223);ctx.stroke();ctx.font='16px GardenSerif, serif';ctx.fillStyle='#a1ab94';ctx.fillText('予你花园 · 每一朵，都为你盛开',500,1265);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('花笺未能导出');
