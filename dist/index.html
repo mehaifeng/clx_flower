@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f8f1">
+  <meta name="description" content="陈琳萱，这是一座只为你盛开的花园。轻触花开，收藏心动，把每一朵鲜花留成一份浪漫。">
+  <meta property="og:title" content="予你花园 · 只为陈琳萱盛开">
+  <meta property="og:description" content="花有花期，喜欢你没有。送你一座永不落幕的小花园。">
+  <title>予你花园 · For Linxuan</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="flower.js">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <symbol id="i-flower" viewBox="0 0 32 32"><path d="M16 12C5-4 0 11 11 16-5 27 10 33 16 21c9 16 21 3 5-5C37 8 24-3 16 12Z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="16" cy="16" r="3" fill="currentColor"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+      <symbol id="i-up-right" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6h12v12"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="m8 6 1.5-3h5L16 6h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="4"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.3 4.7a5.7 5.7 0 0 0-8.3.3 5.7 5.7 0 0 0-8.3-.3C.3 8 2.9 12 5 14l7 7 7-7c2.1-2 4.7-6 1.3-9.3Z"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17V5l11-2v12M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2.5"/><ellipse cx="17" cy="16" rx="3" ry="2.5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m3 17 6-6 4 4 3-3 5 5"/><circle cx="16" cy="8" r="1"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5Z"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
+    </defs>
+  </svg>
+
+  <a href="#main" class="skip-link">走进花园</a>
+  <header class="site-header">
+    <a href="#garden" class="brand" aria-label="予你花园首页">
+      <span class="brand-symbol"><svg class="icon"><use href="#i-flower"/></svg></span>
+      <span class="brand-type">予你花园<small>A GARDEN FOR LINXUAN</small></span>
+    </a>
+    <nav class="desktop-nav" aria-label="主导航">
+      <a href="#garden" class="nav-link active">心动花园<span>01</span></a>
+      <a href="#collection" class="nav-link">我的藏花阁<span>02</span></a>
+      <a href="#letter" class="nav-link">一封情书<span>03</span></a>
+    </nav>
+    <button class="music-button" id="music-toggle" aria-label="播放花园音乐" aria-pressed="false"><span class="sound-bars"><i></i><i></i><i></i></span><span class="music-label">听见花开</span><span class="music-state">OFF</span></button>
+  </header>
+
+  <main id="main">
+    <section class="hero section-anchor" id="garden" aria-labelledby="hero-title">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="tiny-flower">✳</span> A LITTLE ROMANCE, JUST FOR YOU</div>
+          <p class="hero-address"><span></span> 致，我的陈琳萱</p>
+          <h1 id="hero-title">世间的花，<br>都想<span class="bloom-word">为你<svg viewBox="0 0 220 20" aria-hidden="true"><path d="M4 14C57 2 149 1 211 10M20 18c61-7 120-8 173-3"/></svg></span>盛开。</h1>
+          <p class="hero-description">想把日子里的每一份喜欢，<br>都种成你伸手就能触碰的浪漫。</p>
+          <div class="hero-actions">
+            <button class="button button-dark" id="bloom-button"><svg class="icon"><use href="#i-flower"/></svg>让心动开花<svg class="icon arrow"><use href="#i-up-right"/></svg></button>
+            <button class="button button-outline open-capture"><svg class="icon"><use href="#i-camera"/></svg>拍一朵，送给你</button>
+          </div>
+          <div class="dedication"><span class="handwritten">With love, always.</span><span class="dedication-line"></span><span>花有花期，喜欢你没有。</span></div>
+        </div>
+
+        <div class="hero-art" id="hero-art">
+          <div class="art-halo" aria-hidden="true"></div>
+          <div class="orbit orbit-one" aria-hidden="true"></div>
+          <div class="orbit orbit-two" aria-hidden="true"></div>
+          <span class="art-spark art-spark-one" aria-hidden="true">✧</span>
+          <span class="art-spark art-spark-two" aria-hidden="true">✧</span>
+          <span class="art-label">THE FIRST BLOOM</span>
+          <span class="art-caption">为你盛开的，第 001 朵心动</span>
+          <div class="scene-container" id="hero-scene" aria-label="可互动的粉色芍药，左右拖动旋转，轻触绽放">
+            <img class="scene-fallback" src="assets/peony.webp" alt="一朵温柔的粉色芍药" fetchpriority="high">
+            <div class="scene-loading"><span class="loader-flower">✳</span><span>正在唤醒花园</span></div>
+          </div>
+          <div class="touch-hint"><span class="hint-dot"></span>轻触花开 · 拖动旋转 <span class="hint-3d">3D</span></div>
+          <button class="flower-note" id="hero-note"><span class="note-illustration">✳</span><span><small>今日花语</small><strong>你是藏在春天里的心动</strong></span><svg class="icon"><use href="#i-up-right"/></svg></button>
+          <span class="floating-petal petal-one" aria-hidden="true"></span><span class="floating-petal petal-two" aria-hidden="true"></span><span class="floating-petal petal-three" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="hero-bottom"><a href="#collection" class="scroll-cue"><span class="scroll-line"></span>慢慢滑动，浪漫正在生长</a><span class="hero-coordinates">A PRIVATE GARDEN &nbsp; · &nbsp; ALWAYS IN BLOOM</span><span class="hero-bottom-flower">✳</span></div>
+    </section>
+
+    <div class="poetry-strip" aria-hidden="true"><div class="poetry-track"><span>把一整个春天，都送给你</span><svg class="icon"><use href="#i-flower"/></svg><span class="strip-english">Flowers fade. Feelings stay.</span><svg class="icon"><use href="#i-flower"/></svg><span>每一朵，都是喜欢你的形状</span><svg class="icon"><use href="#i-flower"/></svg><span class="strip-english">A little garden. An endless love.</span><svg class="icon"><use href="#i-flower"/></svg></div></div>
+
+    <section class="collection section-anchor section-space" id="collection" aria-labelledby="collection-title">
+      <div class="section-heading reveal"><div><div class="eyebrow">01 / THE FLOWER ARCHIVE</div><h2 id="collection-title">把心动，<em>好好珍藏。</em></h2></div><p>鲜花有千万种姿态，<br>我只想收藏，让你微笑的那一种。</p></div>
+      <div class="collection-toolbar reveal"><div class="collection-tabs" role="tablist" aria-label="藏品筛选"><button class="collection-tab active" role="tab" aria-selected="true" aria-controls="flower-grid" id="tab-all" data-filter="all">全部花朵 <span id="count-all">03</span></button><button class="collection-tab" role="tab" aria-selected="false" aria-controls="flower-grid" id="tab-favorite" data-filter="favorite" tabindex="-1">我的心动 <span id="count-favorite">00</span></button><button class="collection-tab" role="tab" aria-selected="false" aria-controls="flower-grid" id="tab-captured" data-filter="captured" tabindex="-1">亲手采集 <span id="count-captured">00</span></button></div><span class="collection-tip"><span class="small-dot"></span>每一朵，都可以捧在手里转一转</span></div>
+      <div class="flower-grid" id="flower-grid" role="tabpanel" aria-labelledby="tab-all" aria-live="polite"><div class="collection-loading">花朵正在慢慢醒来…</div></div>
+      <div class="collection-bottom"><span><svg class="icon"><use href="#i-heart"/></svg>这里还会长出，更多关于你的浪漫。</span><button class="text-button open-capture">再收藏一份心动 <svg class="icon"><use href="#i-arrow"/></svg></button></div>
+    </section>
+
+    <section class="capture-section section-anchor" id="capture" aria-labelledby="capture-title">
+      <div class="capture-photo-wrap reveal"><div class="capture-photo-frame"><img class="capture-photo" src="assets/peony.webp" alt="晨光下，落在花笺上的一朵粉色芍药" loading="lazy"><div class="viewfinder" aria-hidden="true"><i></i><i></i><i></i><i></i><span class="focus-flower">✧</span></div><span class="photo-caption"><span class="camera-dot"></span> A MOMENT WORTH KEEPING</span></div><span class="photo-tape" aria-hidden="true"></span><span class="photo-handwriting">Don't let this moment fade.</span><div class="mini-memory"><svg class="icon"><use href="#i-flower"/></svg><span>真实的花<br><strong>不止这一刻的浪漫</strong></span><span class="memory-star">✦</span></div></div>
+      <div class="capture-copy reveal"><div class="eyebrow"><span class="small-dot"></span> TURN A FLOWER INTO FOREVER</div><h2 id="capture-title">遇见的花，<br>也想<span>留给你。</span></h2><p>路过花店的那一眼，散步时偶遇的那一朵。<br>拍下来，把短暂的花期，变成可以转动的心动。</p><div class="capture-steps"><span><svg class="icon"><use href="#i-camera"/></svg>拍下鲜花</span><i>···</i><span><svg class="icon"><use href="#i-sparkle"/></svg>塑成 3D</span><i>···</i><span><svg class="icon"><use href="#i-heart"/></svg>自动珍藏</span></div><div class="capture-actions"><button class="button button-dark open-capture"><svg class="icon"><use href="#i-camera"/></svg>把这一朵留下来<svg class="icon arrow"><use href="#i-up-right"/></svg></button><button class="text-button" id="album-entry">从相册选择<svg class="icon"><use href="#i-arrow"/></svg></button></div><p class="capture-footnote">将照片的色彩，化作艺术化 3D 花朵。<br>你的照片与藏品，仅保存在当前设备浏览器中。</p></div>
+    </section>
+
+    <section class="letter-section section-anchor section-space" id="letter" aria-labelledby="letter-title"><div class="letter-heading reveal"><div class="eyebrow">02 / WORDS FROM MY HEART</div><h2 id="letter-title">有些话，<br>想借花告诉你。</h2><p>花园的最后，藏着一封只写给你的信。</p><span class="handwritten">P.S. It's always you.</span></div><div class="letter-object reveal"><span class="letter-deco-flower" aria-hidden="true">✳</span><button class="envelope" id="open-letter" aria-label="拆开写给陈琳萱的情书"><span class="envelope-paper"><span>Dear Linxuan,</span><i></i><i></i><i></i></span><span class="envelope-back"></span><span class="envelope-front"></span><span class="envelope-flap"></span><span class="wax-seal"><svg class="icon"><use href="#i-flower"/></svg></span><span class="envelope-to">致 &nbsp; 陈琳萱</span></button><span class="envelope-hint">轻轻拆开，有一份喜欢在等你 <svg class="icon"><use href="#i-up-right"/></svg></span></div></section>
+  </main>
+
+  <footer class="site-footer"><div class="footer-brand"><svg class="icon"><use href="#i-flower"/></svg><span>予你花园</span></div><p>世界很大，但这一座花园，只为你盛开。</p><span class="footer-sign">MADE WITH LOVE, FOR LINXUAN <svg class="icon"><use href="#i-heart"/></svg></span><button class="petal-rain-button" id="petal-rain">下一场花瓣雨 <span>↗</span></button></footer>
+
+  <nav class="mobile-nav" aria-label="手机导航"><a class="mobile-nav-item active" href="#garden"><svg class="icon"><use href="#i-flower"/></svg><span>花园</span></a><a class="mobile-nav-item" href="#collection"><svg class="icon"><use href="#i-grid"/></svg><span>藏花</span></a><button class="mobile-camera open-capture" aria-label="拍花入藏"><svg class="icon"><use href="#i-camera"/></svg></button><a class="mobile-nav-item" href="#capture"><svg class="icon"><use href="#i-sparkle"/></svg><span>采集</span></a><a class="mobile-nav-item" href="#letter"><svg class="icon"><use href="#i-mail"/></svg><span>情书</span></a></nav>
+
+  <dialog class="capture-dialog" id="capture-dialog" aria-labelledby="capture-dialog-title"><div class="dialog-top"><span class="eyebrow">CAPTURE A LITTLE LOVE</span><button class="icon-button close-capture" aria-label="关闭拍花入藏"><svg class="icon"><use href="#i-close"/></svg></button></div><h2 id="capture-dialog-title">留住一朵，<em>真实的心动。</em></h2><p class="dialog-intro">拍下花的颜色，让它在小花园里再次绽放。</p><div class="capture-view" id="capture-view"><div class="capture-empty" id="capture-empty"><svg class="icon"><use href="#i-camera"/></svg><span>把一朵喜欢的花，放进画面里</span><small>也可以先用示例花朵，体验一次绽放</small></div><video id="camera-video" autoplay playsinline muted hidden aria-label="实时相机画面"></video><img id="photo-preview" alt="你选择的鲜花照片" hidden><div class="capture-viewfinder" aria-hidden="true"></div><button class="shutter-button" id="shutter-button" hidden aria-label="拍摄照片"><span></span></button></div><p class="capture-status" id="capture-status" role="status"></p><div class="photo-source-actions" id="photo-source-actions"><button class="button button-dark" id="start-camera"><svg class="icon"><use href="#i-camera"/></svg>打开相机</button><button class="button button-outline" id="choose-photo"><svg class="icon"><use href="#i-image"/></svg>从相册选择</button><button class="text-button demo-button" id="try-demo">体验示例花朵 <svg class="icon"><use href="#i-arrow"/></svg></button></div><form id="capture-form" hidden><div class="capture-form-row"><label>给这份心动取个名字<input id="flower-name" name="name" maxlength="24" value="今日的小心动" required autocomplete="off"></label><label>花朵姿态<select id="flower-type" name="type"><option value="peony">层叠芍药</option><option value="tulip">温柔郁金香</option><option value="daisy">明媚小雏菊</option></select></label></div><label>留一句花语 <span class="optional">选填</span><input id="flower-note" name="note" maxlength="80" placeholder="比如：看到这朵花的时候，刚好在想你。" autocomplete="off"></label><div class="generate-actions"><button type="button" class="text-button" id="retake-photo">重新选择</button><button type="submit" class="button button-dark" id="generate-button"><svg class="icon"><use href="#i-sparkle"/></svg><span>生成 3D 并入藏</span><svg class="icon"><use href="#i-arrow"/></svg></button></div></form><p class="dialog-footnote">照片取色 · 艺术化建模 · 本机珍藏<br>此版本根据花朵色彩生成 3D 艺术模型，不进行真实花型重建。</p></dialog>
+  <input type="file" id="photo-input" accept="image/*" hidden><input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+
+  <dialog class="detail-dialog" id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="eyebrow">A FLOWER, A FEELING</span><button class="icon-button" id="close-detail" aria-label="关闭花朵详情"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="detail-scene" id="detail-scene"></div><div class="detail-controls"><button class="icon-button" id="rotate-flower" aria-label="旋转花朵"><svg class="icon"><use href="#i-rotate"/></svg></button><span>左右拖动旋转 · 双指缩放</span><button class="icon-button" id="bloom-detail" aria-label="让花朵绽放"><svg class="icon"><use href="#i-flower"/></svg></button></div><div class="detail-copy"><span id="detail-type" class="eyebrow"></span><h2 id="detail-title"></h2><p id="detail-note"></p><div class="detail-meta"><span id="detail-date"></span><span>3D 艺术藏品</span></div><div class="detail-actions"><button class="button button-dark" id="favorite-detail"><svg class="icon"><use href="#i-heart"/></svg><span>记下一份心动</span></button><button class="button button-outline" id="export-flower"><svg class="icon"><use href="#i-download"/></svg>保存花笺</button><button class="text-button remove-flower" id="remove-flower">移出藏品</button></div><details class="original-photo" id="original-photo"><summary>看看相遇时的样子</summary><img id="original-photo-image" alt="这朵藏花的原始照片"></details></div></dialog>
+
+  <dialog class="love-dialog" id="love-dialog" aria-labelledby="love-title"><button class="icon-button" id="close-letter" aria-label="合上情书"><svg class="icon"><use href="#i-close"/></svg></button><div class="love-paper"><span class="eyebrow">A LETTER, JUST FOR YOU</span><svg class="love-flower icon"><use href="#i-flower"/></svg><h2 id="love-title">亲爱的琳萱，</h2><div class="love-words"><p>想送你一个，<br>不会错过花期的世界。</p><p>把每个想起你的瞬间，<br>种成这里的一朵花。<br>晴天时陪你一起明媚，<br>阴天时，也有温柔可寻。</p><p>如果风刚好吹过，<br>那是花在替我说：</p><p class="love-last">今天，也很喜欢你。</p></div><div class="love-sign"><span>一个总想送你花的人</span><span class="handwritten">Yours, always.</span></div><button class="text-button" id="letter-bloom"><svg class="icon"><use href="#i-flower"/></svg>让喜欢，再开一次花</button></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"><svg class="icon"><use href="#i-flower"/></svg><span></span><button hidden id="toast-undo">撤销</button></div>
+  <div id="petal-layer" aria-hidden="true"></div>
+</body>
+</html>

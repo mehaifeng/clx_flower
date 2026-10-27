@@ -1,0 +1,10 @@
+{
+  "name": "a-garden-for-linxuan",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "dev": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist"
+  }
+}
