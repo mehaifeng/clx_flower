@@ -1,6 +1,9 @@
-import { FlowerScene, getThumbnail, analysePhoto, exportFlowerGLB } from './flower.js?v=geometry-3';
-import { generateFlowerAsset, AIError } from './ai.js?v=geometry-3';
-import { createAISettings } from './ai-settings.js?v=geometry-3';
+import { FlowerScene, getThumbnail, getFlowerSVG, analysePhoto, exportFlowerSVG } from './flower.js?v=svg-1';
+import { generateFlowerAsset, AIError } from './ai.js?v=svg-1';
+import { createAISettings } from './ai-settings.js?v=svg-1';
+
+import {inspectSVG} from './svg.js?v=svg-1';
+import {singleFlight, scatterPetals} from './effects.js?v=svg-1';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -14,7 +17,7 @@ const gifts = [
 ];
 let flowers = [], database, storageAvailable = true, activeFilter = 'all';
 let heroWorld, detailWorld, selectedId, photoSource = null, photoIsDemo = false, cameraStream = null;
-let toastTimer, undoAction, thumbnailAvailable = true, processing = false, systemCameraFallback = false;
+let toastTimer, undoAction, processing = false, systemCameraFallback = false;
 let generationController = null;
 const captureDialog = $('#capture-dialog'), detailDialog = $('#detail-dialog'), loveDialog = $('#love-dialog');
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -32,9 +35,9 @@ function syncCreationMode(){
   $('#local-flower-type-label').parentElement.classList.toggle('ai-freeform',enabled);
   if(!enabled&&$('#flower-type').value==='auto')$('#flower-type').value='peony';
   $('#capture-ai-settings span').textContent=ready?'模型已就绪 · 设置':'配置视觉模型';
-  $('#creation-service').textContent=enabled?(ready?`使用 ${config.model} 定义独立曲面与空间结构，花照发送至 ${config.baseUrl}。`:'请先配置并验证视觉模型，再生成独立几何结构。'):'本机模式使用预置花型取色建模，不上传照片。';
+  $('#creation-service').textContent=enabled?(ready?`使用 ${config.model} 直接绘制精细 SVG，花照发送至 ${config.baseUrl}。`:'请先配置并验证视觉模型，再绘制精细 SVG。'):'本机模式使用精细花型取色绘制，不上传照片。';
   $('#creation-service').classList.toggle('attention',enabled&&!ready);
-  if(!processing)$('#generate-button span').textContent=enabled?'AI 生成 3D 并入藏':'生成 3D 并入藏';
+  if(!processing)$('#generate-button span').textContent=enabled?'AI 绘制 SVG 并入藏':'绘制 SVG 并入藏';
 }
 $('#use-ai').addEventListener('change',()=>{if($('#use-ai').checked)$('#flower-type').value='auto';syncCreationMode()});
 
@@ -53,29 +56,30 @@ function notify(message, undo = null) {
 }
 $('#toast-undo').addEventListener('click',async()=>{if(undoAction){const action=undoAction;undoAction=null;await action()}});
 
-function petals(x = innerWidth*.6, y = innerHeight*.4, rain = false) {
-  if(reducedMotion)return;
-  const layer=$('#petal-layer'), colors=['#e9b6c2','#efcbd3','#d99da9','#f4d9d9','#d9dfc7'];
-  const count=innerWidth<760?30:48;
-  for(let i=0;i<count;i++){
-    const p=document.createElement('i'),angle=Math.random()*Math.PI*2,radius=80+Math.random()*(rain?500:270);
-    p.className='burst-petal';
-    p.style.cssText=`--x:${rain?Math.random()*innerWidth:x}px;--y:${rain?-50-Math.random()*250:y}px;--size:${5+Math.random()*9}px;--dx:${rain?(Math.random()-.5)*220:Math.cos(angle)*radius}px;--dy:${rain?innerHeight+400:Math.sin(angle)*radius+250}px;--rot:${Math.random()*800-400}deg;--duration:${rain?4+Math.random()*3:1.8+Math.random()*1.8}s;--petal-color:${colors[i%colors.length]};`;
-    layer.append(p);p.addEventListener('animationend',()=>p.remove(),{once:true});
-  }
-  while(layer.childElementCount>120)layer.firstElementChild.remove();
+const bloomButtons=['bloom-button','bloom-detail','petal-rain','letter-bloom'];
+const bloomFlight=singleFlight(busy=>{
+  for(const id of bloomButtons){$('#'+id).disabled=busy;$('#'+id).setAttribute('aria-busy',String(busy));}
+  $$('.flower-art').forEach(art=>art.setAttribute('aria-disabled',String(busy)));
+});
+function petals(x=innerWidth*.6,y=innerHeight*.4,rain=false,scene=null,message=''){
+  return bloomFlight.run(async()=>{
+    // A dialog's top layer would hide a body-level effect; mount over the open dialog.
+    const layer=document.createElement('div');layer.className='petal-effect-layer';layer.setAttribute('aria-hidden','true');
+    const host=[...document.querySelectorAll('dialog[open]')].at(-1)||document.body;host.append(layer);
+    if(layer.showPopover){try{layer.setAttribute('popover','manual');layer.showPopover();}catch{layer.removeAttribute('popover');}}
+    if(message)notify(message);
+    try{await Promise.all([scene?.blossom(),scatterPetals(layer,x,y,{rain,reducedMotion}),...(reducedMotion?[new Promise(resolve=>setTimeout(resolve,300))]:[])]);}
+    finally{layer.remove();}
+  });
 }
-
 function bloomForHer(){
-  heroWorld?.blossom();
   const rect=$('#hero-scene').getBoundingClientRect();
-  petals(Math.min(innerWidth-30,rect.left+rect.width*.5),Math.max(100,rect.top+rect.height*.35));
-  notify('琳萱，今天也想把花送给你。');
+  petals(Math.min(innerWidth-30,rect.left+rect.width*.5),Math.max(100,rect.top+rect.height*.35),false,heroWorld,'琳萱，今天也想把花送给你。');
 }
 $('#bloom-button').addEventListener('click',bloomForHer);
-$('#hero-scene').addEventListener('flower-tap',e=>{petals(e.detail.x,e.detail.y);notify('你一靠近，花就开了。')});
+$('#hero-scene').addEventListener('flower-tap',e=>petals(e.detail.x,e.detail.y,false,heroWorld,'你一靠近，花就开了。'));
 $('#hero-note').addEventListener('click',()=>openDetail('gift-peony'));
-$('#petal-rain').addEventListener('click',()=>{petals(0,0,true);notify('愿你的世界，总有花开。')});
+$('#petal-rain').addEventListener('click',()=>petals(0,0,true,null,'愿你的世界，总有花开。'));
 
 async function openDatabase(){
   return new Promise((resolve,reject)=>{
@@ -96,15 +100,9 @@ async function saveRecord(record){
 async function deleteRecord(id){
   return new Promise((resolve,reject)=>{const tx=database.transaction('flowers','readwrite');tx.objectStore('flowers').delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)});
 }
-function fallbackThumbnail(config){
-  if(config.geometry)return config.photo||'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 540"><text x="240" y="265" text-anchor="middle" fill="#82916e" font-size="18">3D 结构已保留</text><text x="240" y="300" text-anchor="middle" fill="#9ba68a" font-size="12">当前设备暂不支持立体预览</text></svg>');
-  const petals=Array.from({length:config.type==='tulip'?5:12},(_,i)=>`<ellipse cx="240" cy="170" rx="${config.type==='tulip'?50:30}" ry="100" fill="${/^#[0-9a-f]{6}$/i.test(config.color)?config.color:'#e7b0bd'}" stroke="#fff8" transform="rotate(${i*(config.type==='tulip'?20:30)} 240 220)"/>`).join('');
-  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 540"><path d="M240 250Q255 380 230 490M242 390Q140 300 165 365Q180 430 242 390M240 425Q330 325 310 390Q290 450 240 425" fill="#819568" stroke="#819568" stroke-width="6"/>${petals}<circle cx="240" cy="220" r="25" fill="#d7b570"/></svg>`);
-}
 function thumbnail(record){
-  if(record.thumb)return record.thumb;
-  if(thumbnailAvailable){try{return getThumbnail(record)}catch(error){thumbnailAvailable=false;console.warn('3D preview unavailable:',error.message)}}
-  return fallbackThumbnail(record);
+  try{return getThumbnail(record);}
+  catch{return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600"><text x="240" y="300" text-anchor="middle" fill="#82916e" font-size="18">原照已保留，等待重新绘制</text></svg>');}
 }
 function getVisibleFlowers(){return flowers.filter(f=>activeFilter==='favorite'?f.favorite:activeFilter==='captured'?!f.gift:true).sort((a,b)=>a.gift&&b.gift?gifts.findIndex(g=>g.id===a.id)-gifts.findIndex(g=>g.id===b.id):Number(!!a.gift)-Number(!!b.gift)||(b.createdAt||0)-(a.createdAt||0))}
 function dateLabel(record){if(record.gift)return'FOR YOU';return new Date(record.createdAt).toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit'}).replace(/\//g,'.')}
@@ -127,12 +125,12 @@ function renderCollection(){
     const card=document.createElement('article');card.className='flower-card';card.dataset.id=record.id;
     card.innerHTML='<button class="card-visual"><span class="card-number"></span><img alt="" loading="lazy"><span class="card-tag"></span><span class="card-open-icon"><svg class="icon"><use href="#i-up-right"/></svg></span></button><button class="card-favorite"><svg class="icon"><use href="#i-heart"/></svg></button><div class="card-info"><div class="card-info-top"><h3 class="card-title"></h3><span class="card-date"></span></div><p class="card-subtitle"></p></div>';
     $('.card-number',card).textContent=String(index+1).padStart(2,'0');
-    $('.card-visual',card).setAttribute('aria-label',`赏玩${record.name}的 3D 鲜花`);
-    const image=$('img',card);image.src=record.thumb||thumbnail(record);image.alt=record.name;
-    $('.card-tag',card).textContent=record.geometry?'MODEL-AUTHORED / 3D':record.gift?'A GIFT FOR YOU':record.ai?'LEGACY / TEMPLATE':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
+    $('.card-visual',card).setAttribute('aria-label',`赏玩${record.name}的精细 SVG 鲜花`);
+    const image=$('img',card);image.src=thumbnail(record);image.alt=record.name;
+    $('.card-tag',card).textContent=record.ai?.method==='vision-svg-v1'?'BOTANICAL / SVG':record.gift?'A GIFT FOR YOU':record.svgOrigin==='legacy'?'VECTOR EDITION':record.demo?'DEMO CAPTURE':'A MOMENT YOU KEPT';
     const heart=$('.card-favorite',card);heart.setAttribute('aria-pressed',String(!!record.favorite));heart.setAttribute('aria-label',`${record.favorite?'取消心动':'记下心动'}：${record.name}`);
     $('.card-title',card).textContent=record.name;$('.card-date',card).textContent=dateLabel(record);
-    $('.card-subtitle',card).textContent=`${record.species||typeNames[record.type]||'鲜花'} · ${record.geometry?'独立几何生成':record.ai?'旧版花型调参':typeLatin[record.type]||'Flower'}`;
+    $('.card-subtitle',card).textContent=`${record.species||typeNames[record.type]||'鲜花'} · ${record.ai?.method==='vision-svg-v1'?'AI 精细 SVG':record.svgOrigin==='legacy'?'藏品矢量转绘':typeLatin[record.type]||'Botanical SVG'}`;
     $('.card-visual',card).addEventListener('click',()=>openDetail(record.id));heart.addEventListener('click',()=>toggleFavorite(record.id));grid.append(card);
   });
 }
@@ -157,31 +155,33 @@ function unlockScroll(){if(!$$('dialog[open]').length){document.body.style.overf
 function openDetail(id){
   const record=flowers.find(f=>f.id===id);if(!record){notify('花朵还在慢慢醒来，请再试一次。');return}
   selectedId=id;detailWorld?.dispose();detailWorld=null;$('#detail-scene').replaceChildren();
-  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${record.species||typeNames[record.type]||'鲜花'} / ${record.geometry?'SPATIAL GEOMETRY':record.ai?'LEGACY / TEMPLATE':(typeLatin[record.type]||'FLOWER').toUpperCase()}`;
+  $('#detail-title').textContent=record.name;$('#detail-type').textContent=`${record.species||typeNames[record.type]||'鲜花'} / ${record.ai?.method==='vision-svg-v1'?'BOTANICAL SVG':record.svgOrigin==='legacy'?'VECTOR EDITION':(typeLatin[record.type]||'BOTANICAL SVG').toUpperCase()}`;
   $('#detail-note').textContent=record.note||'这一刻的心动，想替你好好留着。';
   $('#detail-date').textContent=record.gift?'花园赠礼 · 只为你盛开':`${record.ai?'AI 视觉创作':record.demo?'示例采集':'亲手采集'} · ${new Date(record.createdAt).toLocaleDateString('zh-CN')}`;
   $('#remove-flower').hidden=!!record.gift;$('#original-photo').hidden=!record.photo;$('#original-photo').open=false;
   $('#original-photo-image').src=record.photo||'';updateDetailFavorite(record);
-  $('#asset-origin').hidden=!record.ai&&!record.geometry;
-  $('#asset-origin').textContent=record.geometry?'这朵花的曲面控制点、空间路径与部件位置由视觉模型定义，未使用预置花型。':'这是旧版「预置花型调参」资产，可用原照重新生成独立结构。';
-  $('#geometry-inspector').hidden=!record.geometry;$('#geometry-inspector').open=false;
-  $('#regenerate-geometry').hidden=!record.photo||!record.ai||!!record.geometry;
-  $('#geometry-json').textContent=record.geometry?JSON.stringify(record.geometry,null,2):'';
-  $('#geometry-description').textContent=record.shapeDescription||'';
-  const stats=record.geometryStats||{};
-  $('#geometry-stats').textContent=record.geometry?`${stats.surfaces||0} 个独立曲面 · ${stats.paths||0} 条空间路径 · ${stats.customMeshes||0} 个自定义网格 · ${stats.instances||0} 个部件实例 · ${(stats.vertices||0).toLocaleString()} 个顶点`:'';
-  $('#geometry-fingerprint').textContent=record.geometryHash?`结构指纹 · ${record.geometryHash.slice(0,20)}`:'';
+  $('#asset-origin').hidden=false;
+  $('#asset-origin').textContent=record.ai?.method==='vision-svg-v1'?'视觉模型根据原照直接绘制了这朵花的 SVG 代码。':record.svgOrigin==='legacy'?'这朵花已从旧藏品转绘为 SVG；原照与原有藏品信息仍然保留。':'细致描绘的植物 SVG 插画，每一片花瓣都留着温柔的纹理。';
+  $('#svg-inspector').hidden=false;$('#svg-inspector').open=false;
+  $('#regenerate-svg').hidden=!record.photo||record.ai?.method==='vision-svg-v1';
+  try{
+    const svg=getFlowerSVG(record),stats=inspectSVG(svg);
+    $('#svg-code').textContent=svg;$('#svg-description').textContent=record.shapeDescription||'分层花瓣、细腻渐变、叶脉与花蕊。';
+    $('#svg-stats').textContent=`${stats.paths} 条矢量路径 · ${stats.gradients} 组渐变 · ${stats.shapes} 个细节图形 · ${(stats.bytes/1024).toFixed(1)} KB`;
+    $('#svg-fingerprint').textContent=record.svgHash?`作品指纹 · ${record.svgHash.slice(0,20)}`:'';
+  }catch{$('#svg-inspector').hidden=true;}
   if(!detailDialog.open)detailDialog.showModal();lockScroll();
-  try{detailWorld=new FlowerScene($('#detail-scene'),record,{detail:true});$('.detail-controls span').textContent='左右拖动旋转 · 双指缩放'}
-  catch(error){const img=new Image();img.src=record.thumb||fallbackThumbnail(record);img.alt=record.name;img.style.cssText='width:100%;height:100%;object-fit:contain';$('#detail-scene').append(img);$('.detail-controls span').textContent='当前设备使用静态预览，3D 参数已保留';console.warn(error.message)}
+  try{detailWorld=new FlowerScene($('#detail-scene'),record,{detail:true});detailWorld.art.setAttribute('aria-disabled',String(bloomFlight.busy));$('.detail-controls span').textContent='轻触绽放 · 拖动轻转 · 双指缩放';}
+  catch{const img=new Image();img.src=thumbnail(record);img.alt=record.name;img.style.cssText='width:100%;height:100%;object-fit:contain';$('#detail-scene').append(img);$('.detail-controls span').textContent='可用原照重新绘制 SVG';}
+
 }
 function updateDetailFavorite(record){$('#favorite-detail').setAttribute('aria-pressed',String(!!record.favorite));$('#favorite-detail span').textContent=record.favorite?'已记下这份心动':'记下一份心动';$('#favorite-detail .icon').style.fill=record.favorite?'#ffffff45':'none'}
 $('#close-detail').addEventListener('click',()=>detailDialog.close());
 detailDialog.addEventListener('close',()=>{detailWorld?.dispose();detailWorld=null;selectedId=null;unlockScroll()});
 $('#favorite-detail').addEventListener('click',()=>{if(selectedId)toggleFavorite(selectedId)});
 $('#rotate-flower').addEventListener('click',()=>detailWorld?.rotate());
-$('#bloom-detail').addEventListener('click',()=>{detailWorld?.blossom();const rect=$('#detail-scene').getBoundingClientRect();petals(rect.left+rect.width*.5,rect.top+rect.height*.35)});
-$('#detail-scene').addEventListener('flower-tap',e=>petals(e.detail.x,e.detail.y));
+$('#bloom-detail').addEventListener('click',()=>{const rect=$('#detail-scene').getBoundingClientRect();petals(rect.left+rect.width*.5,rect.top+rect.height*.35,false,detailWorld)});
+$('#detail-scene').addEventListener('flower-tap',e=>petals(e.detail.x,e.detail.y,false,detailWorld));
 $('#remove-flower').addEventListener('click',async()=>{
   const record=flowers.find(f=>f.id===selectedId);if(!record||record.gift)return;
   try{await deleteRecord(record.id);flowers=flowers.filter(f=>f.id!==record.id);detailDialog.close();renderCollection();notify('已移出这朵藏花。',async()=>{try{await saveRecord(record);flowers.push(record);renderCollection();notify('花朵回到花园里了。')}catch{notify('恢复失败，请检查浏览器储存空间。')}})}catch{notify('未能移出藏品，请稍后重试。')}
@@ -197,7 +197,7 @@ $$('.close-capture').forEach(button=>button.addEventListener('click',()=>capture
 function captureStatus(message,error=false){$('#capture-status').textContent=message;$('#capture-status').classList.toggle('error',error)}
 function stopCamera(){if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null}$('#camera-video').srcObject=null;$('#camera-video').hidden=true;$('#shutter-button').hidden=true}
 function resetCapture(){
-  stopCamera();photoSource=null;photoIsDemo=false;$('#capture-form').hidden=true;$('#photo-source-actions').hidden=false;$('#capture-empty').hidden=false;$('#photo-preview').hidden=true;$('#photo-preview').removeAttribute('src');$('#flower-name').value='今日的小心动';$('#flower-note').value='';$('#flower-type').value='peony';captureStatus('');$('#generate-button').disabled=false;$('#generate-button span').textContent='生成 3D 并入藏';$('#photo-input').value='';$('#camera-input').value='';
+  stopCamera();photoSource=null;photoIsDemo=false;$('#capture-form').hidden=true;$('#photo-source-actions').hidden=false;$('#capture-empty').hidden=false;$('#photo-preview').hidden=true;$('#photo-preview').removeAttribute('src');$('#flower-name').value='今日的小心动';$('#flower-note').value='';$('#flower-type').value='peony';captureStatus('');$('#generate-button').disabled=false;$('#generate-button span').textContent='绘制 SVG 并入藏';$('#photo-input').value='';$('#camera-input').value='';
   captureBusy(false);$('#use-ai').checked=aiSettings.isReady();if(aiSettings.isReady())$('#flower-type').value='auto';syncCreationMode();
 }
 captureDialog.addEventListener('close',()=>{stopCamera();generationController?.abort();unlockScroll()});
@@ -249,7 +249,7 @@ $('#capture-form').addEventListener('submit',async event=>{
     if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
     const {suggestedName,suggestedNote,...asset}=recipe;
     const record={...asset,id:crypto.randomUUID?.()||`flower-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:useAI&&name==='今日的小心动'?suggestedName:name,note:note||suggestedNote||'',createdAt:Date.now(),favorite:false,gift:false,demo,photo:source};
-    captureStatus(useAI?'02 / 正在将独立曲面与空间路径构成网格…':'02 / 正在塑成一朵立体的花…');await frame();await frame();record.thumb=thumbnail(record);
+    captureStatus(useAI?'02 / 正在校验精细 SVG 的路径与渐变…':'02 / 正在绘制细腻的花瓣与叶脉…');await frame();await frame();record.svg=getFlowerSVG(record);record.svgStats=inspectSVG(record.svg);record.thumb=thumbnail(record);
     if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
     $('#cancel-generation').hidden=true;
     captureStatus('03 / 正在把心动放进藏花阁…');await saveRecord(record);flowers.push(record);setFilter('all');
@@ -258,28 +258,19 @@ $('#capture-form').addEventListener('submit',async event=>{
   finally{if(generationController===controller)generationController=null;processing=false;captureBusy(false);syncCreationMode()}
 });
 
-$('#regenerate-geometry').addEventListener('click',async()=>{
+$('#regenerate-svg').addEventListener('click',async()=>{
   const record=flowers.find(f=>f.id===selectedId);if(!record?.photo)return;
   detailDialog.close();await openCapture();setPhoto(record.photo,!!record.demo);
   $('#flower-name').value=record.name;$('#flower-note').value=record.note||'';$('#use-ai').checked=true;syncCreationMode();
-  captureStatus('原始照片已带入。此次将生成独立几何结构，旧藏品会保留。');
+  captureStatus('原始照片已带入。此次由 AI 绘制精细 SVG，旧藏品会保留。');
 });
 
-$('#export-geometry').addEventListener('click',()=>{
-  const record=flowers.find(f=>f.id===selectedId);if(!record?.geometry)return;
-  const data={version:2,name:record.name,species:record.species,shapeDescription:record.shapeDescription,geometryHash:record.geometryHash,geometryStats:record.geometryStats,geometry:record.geometry};
-  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),link=document.createElement('a');
-  link.href=url;link.download=`予你花园-${record.name.replace(/[\\/:*?"<>|]/g,'')}-geometry.json`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notify('已导出这朵花的独立几何结构。');
-});
-
-$('#export-3d').addEventListener('click',async()=>{
+$('#export-svg').addEventListener('click',()=>{
   const record=flowers.find(f=>f.id===selectedId);if(!record)return;
-  const button=$('#export-3d');button.disabled=true;
   try{
-    const buffer=await exportFlowerGLB(record),blob=new Blob([buffer],{type:'model/gltf-binary'}),url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download=`予你花园-${record.name.replace(/[\\/:*?"<>|]/g,'')}.glb`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notify('3D 花卉资产已导出，可在支持 GLB 的软件中打开。');
-  }catch{notify('3D 资产暂时没有导出成功，请稍后重试。')}
-  finally{button.disabled=false}
+    const svg=exportFlowerSVG(record),url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'})),link=document.createElement('a');
+    link.href=url;link.download=`予你花园-${record.name.replace(/[\\/:*?"<>|]/g,'')}.svg`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);notify('精细 SVG 已导出，放大依然清晰。');
+  }catch(error){notify(error.message||'SVG 暂时没有导出成功，请稍后重试。');}
 });
 
 function drawWrapped(ctx,text,x,y,maxWidth,lineHeight,maxLines=5){
@@ -294,9 +285,9 @@ $('#export-flower').addEventListener('click',async()=>{
     await document.fonts.ready;const canvas=document.createElement('canvas');canvas.width=1000;canvas.height=1350;const ctx=canvas.getContext('2d');
     ctx.fillStyle='#f8f8f1';ctx.fillRect(0,0,1000,1350);ctx.strokeStyle='#d4ddc7';ctx.lineWidth=2;ctx.strokeRect(40,40,920,1270);
     ctx.fillStyle='#82926e';ctx.textAlign='center';ctx.font='15px Arial';ctx.letterSpacing='4px';ctx.fillText('A LITTLE GARDEN, JUST FOR LINXUAN',500,105);
-    const image=new Image();image.src=record.thumb||thumbnail(record);await image.decode();ctx.drawImage(image,180,130,640,720);
+    const image=new Image();image.src=thumbnail(record);await image.decode();ctx.drawImage(image,180,130,640,720);
     ctx.fillStyle='#385341';ctx.font='42px GardenSerif, serif';ctx.letterSpacing='3px';ctx.fillText(record.name,500,920);
-    ctx.fillStyle='#819271';ctx.font='17px Arial';ctx.letterSpacing='2px';ctx.fillText(`${record.species||typeNames[record.type]||'鲜花'} · ${record.geometry?'独立几何生成':typeLatin[record.type]||'Flower'}`,500,965);
+    ctx.fillStyle='#819271';ctx.font='17px Arial';ctx.letterSpacing='2px';ctx.fillText(`${record.species||typeNames[record.type]||'鲜花'} · ${record.ai?.method==='vision-svg-v1'?'AI 精细 SVG':typeLatin[record.type]||'Botanical SVG'}`,500,965);
     ctx.font='24px GardenSerif, serif';ctx.fillStyle='#7c8971';ctx.letterSpacing='1px';drawWrapped(ctx,record.note||'花有花期，喜欢你没有。',500,1040,760,42,4);
     ctx.strokeStyle='#dce2d1';ctx.beginPath();ctx.moveTo(350,1223);ctx.lineTo(650,1223);ctx.stroke();ctx.font='16px GardenSerif, serif';ctx.fillStyle='#a1ab94';ctx.fillText('予你花园 · 每一朵，都为你盛开',500,1265);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('花笺未能导出');
@@ -307,7 +298,7 @@ $('#export-flower').addEventListener('click',async()=>{
 
 $('#open-letter').addEventListener('click',()=>{loveDialog.showModal();lockScroll()});
 $('#close-letter').addEventListener('click',()=>loveDialog.close());loveDialog.addEventListener('close',unlockScroll);
-$('#letter-bloom').addEventListener('click',()=>{petals(innerWidth*.5,innerHeight*.4,true);notify('不止今天，每一天都想让你开心。')});
+$('#letter-bloom').addEventListener('click',()=>petals(innerWidth*.5,innerHeight*.4,true,null,'不止今天，每一天都想让你开心。'));
 for(const dialog of [captureDialog,detailDialog,loveDialog]){
   dialog.addEventListener('click',e=>{if(e.target===dialog){const rect=dialog.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)dialog.close()}});
 }
@@ -340,14 +331,24 @@ let scrollTick=false;
 window.addEventListener('scroll',()=>{if(!scrollTick){requestAnimationFrame(()=>{if(heroWorld)heroWorld.scrollProgress=Math.min(1,scrollY/innerHeight);if(!reducedMotion){const offset=Math.min(scrollY*.015,20);$('.orbit-one').style.transform=`rotate(${-34+offset}deg)`;$('.orbit-two').style.transform=`rotate(${34-offset}deg)`}scrollTick=false});scrollTick=true}},{passive:true});
 
 async function init(){
-  try{heroWorld=new FlowerScene($('#hero-scene'),gifts[0])}
-  catch(error){$('#hero-scene').classList.add('webgl-failed','scene-ready');$('.touch-hint').textContent='当前设备使用花卉静态预览';console.warn('3D unavailable:',error.message)}
-  try{await openDatabase();flowers=await readRecords()}
-  catch(error){storageAvailable=false;flowers=[];notify('浏览器储存未开启，可赏花；采集与心动需要普通浏览模式。');console.warn('Local storage:',error.message)}
+  try{heroWorld=new FlowerScene($('#hero-scene'),gifts[0]);}
+  catch{$('#hero-scene').classList.add('svg-failed','scene-ready');$('.touch-hint').textContent='精细植物插画';}
+  try{await openDatabase();flowers=await readRecords();}
+  catch(error){storageAvailable=false;flowers=[];notify('浏览器储存未开启，可赏花；采集与心动需要普通浏览模式。');console.warn('Local storage:',error.message);}
+  // Refresh old raster thumbnails and convert old authored shapes without changing favorites or photos.
+  for(let i=0;i<flowers.length;i++){
+    const record=flowers[i];
+    if(record.svg&&record.thumb?.startsWith('data:image/svg+xml'))continue;
+    try{
+      const updated={...record,svg:getFlowerSVG(record),svgOrigin:record.geometry||record.ai?'legacy':'local'};
+      updated.svgStats=inspectSVG(updated.svg);updated.thumb=thumbnail(updated);flowers[i]=updated;
+      if(storageAvailable)await saveRecord(updated);
+    }catch{ /* Keep the original record and source photo if conversion is unavailable. */ }
+  }
   for(const gift of gifts){
     if(!flowers.some(f=>f.id===gift.id)){
-      const record={...gift,thumb:thumbnail(gift)};flowers.push(record);
-      if(storageAvailable)try{await saveRecord(record)}catch{storageAvailable=false}
+      const record={...gift,svg:getFlowerSVG(gift),thumb:thumbnail(gift)};flowers.push(record);
+      if(storageAvailable)try{await saveRecord(record);}catch{storageAvailable=false;}
     }
   }
   renderCollection();

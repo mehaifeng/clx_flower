@@ -1,83 +1,82 @@
 # 予你花园 · For Linxuan
 
-为陈琳萱设计的私人鲜花网页，采用奶油白、鼠尾草绿和淡粉色，配以中文衬线字、英文题字、花笺、拍立得和信封。
+为陈琳萱设计的私人鲜花网页。奶油白、鼠尾草绿和淡粉色，配以中文衬线字、花笺、拍立得和信封。
 
 ## 已实现
 
-- Three.js 实时 3D 芍药、郁金香和雏菊。轻触绽放、横向拖动旋转、详情双指缩放；手机首屏保留纵向滑动。
-- 花瓣爆发、花瓣雨、花朵轻摆、随滚动变化的花朵视角与轨道、分区渐入、手机底部导航。
-- 本机相机、系统相机降级、相册选图、示例体验。照片自动压缩；可选本机取色建模或 AI 视觉建模，完成后自动写入 IndexedDB。
-- OpenAI 兼容视觉模型配置：Base URL、API Key、模型 ID、候选模型列表、随机图片视觉验证，以及取消请求和错误提示。
-- AI 直接定义独立曲面的控制点、空间路径、自定义三角网格、材质与各部件实例的位置/旋转/缩放，不再从芍药、郁金香、雏菊三种模板中选型。
-- 详情页展示结构说明、曲面/路径/网格/实例/顶点数量和结构指纹；可以导出完整结构 JSON，检查和复现模型实际生成的数据。
-- 本机藏花阁、心动收藏、分类筛选、详情旋转、原图回看、导出 PNG 花笺与标准 GLB 2.0 文件、删除并撤销。
-- 可以拆开的专属信笺，以及用户点击后才播放的轻柔合成音乐。
-- 移动端布局、安全区、低像素比渲染、离屏停止绘制、减少动态效果偏好、键盘筛选、原生对话框。
+- 全站花卉使用精细 SVG：芍药、郁金香、雏菊均由独立花瓣曲线、渐变明暗、高光、花脉、叶脉和花蕊组成，可无损放大。
+- 首页与详情轻触绽放、花朵轻摆、拖动轻转，详情支持双指缩放。手机首页保留纵向滑动。
+- 自然花瓣散落与花瓣雨：先舒展、轻轻向外扬起，再随重力、风与摆动落下；花瓣使用 SVG 轮廓。
+- 所有绽放入口共享播放锁。动画播放中按钮禁用，花朵点击忽略；整段花开和最后一片花瓣播放完才解锁。没有定时强制重启，也不会截断旧花瓣。键盘长按不会重复触发。
+- 本机相机、系统相机降级、相册选图和示例体验；照片压缩后保存在当前浏览器 IndexedDB。
+- 可选本机取色绘制或 AI 视觉绘制，完成后自动入藏。收藏、筛选、原图回看、删除与撤销仍然可用。
+- 导出完整 `.svg` 矢量资产、查看 SVG 路径/渐变数量与源码，以及导出 PNG 花笺。
+- 可拆开的专属信笺、用户点击后才播放的轻柔合成音乐、移动端导航和减少动态效果偏好。
 
-## 功能边界
+## AI 直接输出精细 SVG
 
-本机模式仍使用预置花型取色建模。新版 AI 模式将照片发送至用户配置的视觉模型，让模型直接编排独立几何：16 控制点的实心双三次 Bézier 曲面、三维路径管线、椭球形部件、任意索引三角网格，以及各部件的显式空间变换。`dist/geometry.js` 是通用几何编译器，不包含花卉种类、花瓣原型或模型资产查找。AI 路径没有花型枚举，也不会在输出无效时改用预置花朵。
+`dist/ai.js` 的 `FLOWER_SYSTEM_PROMPT` 通过真正的 `role: "system"` 消息发送。模型根据花照直接编写 JSON 中的完整 `svg` 字符串，同时返回花名、花语、主色和造型说明。要求包括：
 
-这是**视觉模型驱动的几何创作**，不是专用图生 3D 模型，也不承诺单张照片的精确三维重建。结果质量依赖用户选择的视觉模型和照片；背面与遮挡结构属于艺术推断。模型只能返回数据，不能执行代码或加载外部资源。GLB 导出包含实际网格、材质、顶点色和结构指纹，不包含 API Key 或原始照片。
+- 根据照片绘制独立 Bézier 花瓣、自然边缘、叠层与卷曲、透明高光和遮挡暗部，细描叶脉、花丝与花蕊。
+- 通常绘制 40–140 个可见细节、20–80 条路径和 4–12 组渐变；最低需有 16 个图形、8 条路径、2 组渐变。简单花型通过脉络与花蕊增加细节，不凭空加花瓣。
+- 使用透明的 `480 × 600` 画布，完整保留花朵、留出边缘，直接返回可用 SVG 源码。
+- 使用静态矢量标签与展示属性；禁止脚本、事件、CSS、嵌入图片、外部资源、动画标签和滤镜。
 
-旧版 `vision-parametric-v1` 藏品不会自动改变或删除，会明确标注「旧版花型调参」。有原图的旧藏品可点击「用原照重新生成独立结构」，保留原藏品并新建一个几何生成版本。首页的三朵花园赠礼保持原设计。
+AI 路径没有花型枚举或模板回退。源码不完整、不安全或细节不足会明确失败，保留原照让用户重试。图形细节数量是最低格式门槛，最终审美质量仍取决于所选视觉模型与照片。
 
-藏品、原始照片和收藏状态保存在**当前浏览器的 IndexedDB**，不跨设备同步。清除网站数据或使用某些隐私浏览模式会影响保存。可以导出花笺图片或 GLB 留存。摄像头需要浏览器授权，安全来源为 HTTPS 或本机 localhost。本机模式不上传照片；AI 模式仅将所选照片发送至用户填写的模型服务，该服务的数据保留政策由服务商决定。
+`dist/svg.js` 在展示、缩略图、保存前及导出时校验 XML 结构、标签与属性白名单、唯一 ID、内部引用、有限坐标、节点与体积预算。SVG 展示会为 ID 添加实例前缀，避免首页和详情的渐变相互污染。模型内容无法执行代码或加载外链。
 
-Three.js、字体和压缩后的图片全部随网站打包，运行时无需访问 CDN。初始素材总量低于 2 MB；3D 缩略图在本机生成。
+## 配置视觉模型
 
-## 配置 AI 视觉创作
+1. 点击「AI 创作」或拍花表单中的「配置视觉模型」。
+2. 填写 OpenAI 兼容 Base URL、API Key、视觉模型 ID。Base URL 支持 `/v1` 或自定义路径，完整 `/chat/completions` 会自动归一化。
+3. 可读取候选模型；已明确为纯文本的模型会被过滤。
+4. 点击「验证视觉能力」。页面发送本机随机图形，正确识别颜色和形状后才能保存；会产生一次模型调用。
+5. 保存后拍花流程启用 AI 视觉绘制，也可关闭开关使用本机取色 SVG。
+6. 生成后自动入藏。在详情选择「导出 SVG」，或展开「查看这朵花的 SVG 细节」检查源码。
 
-1. 点击页面顶部的「AI 创作」，或拍花表单中的「配置视觉模型」。
-2. 填写 Base URL、API Key 和服务商提供的视觉模型 ID。Base URL 可以包含 `/v1` 或自定义路径；完整 `/chat/completions` 地址会自动归一化。
-3. 可点击「读取模型列表」获取候选模型。明确标记为纯文本的模型会被排除；模态未知的候选项仍必须验证。
-4. 点击「验证视觉能力」。页面发送一张本机随机生成的图形图片，要求模型按顺序识别颜色和形状；正确回答后才允许保存。测试会产生一次模型调用，可能有少量费用。
-5. 点击「保存并使用」，随后拍花流程自动启用「AI 视觉创作」。也可关闭开关继续使用本机艺术建模。
-6. 生成后自动入藏，打开花朵详情可选择「导出 3D」下载 `.glb` 资产；展开「查看这朵花的生成结构」可查看控制点、数量与指纹，并导出结构 JSON。
+API Key 仅在当前页面内存中使用，不写入 localStorage、IndexedDB、源码、日志或导出文件。设置对话框关闭时清空密码输入框，刷新后需重新填写和验证。只保存非敏感 Base URL 与模型 ID。模型变更需重新验证。
 
-API Key **仅存在当前页面内存**，不写入 localStorage、IndexedDB、源码、日志或导出文件；关闭设置时会清空密码输入框，刷新页面后需重新填写并验证。只记住非敏感的 Base URL 与模型 ID。配置变更后必须重新验证，不通过验证的模型不能进入 AI 生成流程。AI 失败不会自动降级为本机结果，也不会保存伪造的成功藏品。
+浏览器直连 `POST /chat/completions`，照片以 `image_url` Base64 Data URL 发送，密钥放在 Authorization 请求头。服务商需允许本站的 CORS 请求；非本机地址需 HTTPS。支持 `/models`、两种 token 上限参数兼容、取消、超时及错误提示。没有内置密钥或后端代理。真实服务质量需由用户在页面内配置后验证。
 
-请求使用 OpenAI 兼容的 `POST /chat/completions`，图片通过 `image_url` 的 Base64 Data URL 发送，API Key 放在 Authorization 请求头。实现参照 [OpenAI 图片输入文档](https://developers.openai.com/api/docs/guides/images-vision?api-mode=chat)和 [Chat Completions API](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。支持 `/models` 候选列表、两种 token 上限参数的兼容、超时与取消。
+## 旧藏品与存储
 
-这是浏览器直连模式，服务商需要允许此站点的 CORS 请求。非本机地址必须使用 HTTPS。没有统一后端代理，也没有内置密钥；实际可用性取决于用户填写的服务和账户权限。
+原本的三种赠花与本机花型会更新为精细 SVG，旧缩略图也会刷新。旧 AI 独立曲面、空间路径和自定义形状由 `dist/legacy-svg.js` 在本机按原始控制点转绘成 SVG，不运行 Three.js、不套用新花型，保留原始记录、原照、名字和收藏状态。详情明确标记「藏品矢量转绘」，可用原照新建 AI 精细 SVG 版本。旧数据无法转换时，保留原记录并提示重新绘制。
 
-## 本地运行
+藏品、照片和收藏均保存在当前浏览器的 IndexedDB，不跨设备同步。清除网站数据或某些隐私浏览模式会影响保存。可导出 SVG 或 PNG 花笺留存。摄像头需要浏览器授权与 HTTPS/localhost。本机模式不上传照片；AI 模式仅向用户填写的模型服务发送所选照片。
 
-不需要安装依赖或构建。
+Three.js、WebGL 渲染器、GLB 导出器与几何编译器已移除。网站运行不依赖 CDN，静态资源约 805 KB（包括字体、照片与 SVG）。采集区的摄影素材与原始花照仍作为照片保留。
+
+## 本地运行与验证
+
+不需要安装依赖或构建：
 
 ```bash
 cd /home/haydenai/Sources/FlowersforChenLinXuan/linxuan-garden
-python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
+npm run dev
 ```
 
-访问 `http://127.0.0.1:4173`。源码检查：
+访问 `http://127.0.0.1:4173`。运行检查：
 
 ```bash
-node scripts/check.mjs
-node scripts/check-ai.mjs
+npm run check
 ```
 
-检查包含 HTML/ARIA 关联、交互选择器、静态资源、JavaScript 语法、顶点/法线/三角形有效性、三维边界和移动端资源预算。AI 检查使用模拟服务验证图片请求、视觉门槛、模型列表过滤、鉴权/限流/超时/取消及敏感信息隔离；同色百合、蜘蛛菊与不对称网格的结构样例验证新的生成通道不依赖旧三种模板，并实际生成和解析 GLB 2.0 文件。测试样例仅在 `scripts/geometry-fixtures.mjs`，不会随网站发布，也不会用于真实生成。这些检查不使用真实密钥，也不产生付费调用。此前浏览器访问权限未获允许，因此未完成浏览器页面与真机触控实测；真实服务需由用户在页面内填写密钥后验证。
-
-几何结构限制为 1–32 个部件、180 个实例、120,000 个展开顶点、200,000 个三角面。曲面会生成正反面及连接侧边，统一缩放和取景只影响展示，不替换模型生成的控制点。无效坐标、坏索引、退化曲面、过大结构或只有颜色的旧版响应会失败并保留原照片，不自动套用模板。
+检查包括 HTML/ARIA、交互引用、静态资源、模块语法、三种精细 SVG、矢量导出、旧藏品转换、快速点击互斥、花瓣起落轨迹、最后一片花瓣完成后的清理、减少动态效果、system 消息及图片请求、SVG 安全与细节门槛、视觉验证、模型列表、鉴权/限流/超时/取消和密钥隔离。使用模拟服务，不使用真实密钥、不产生付费调用。浏览器观感、详情、示例入藏和连续点击另行实测；真实摄像头和付费模型需由用户在设备上验证。
 
 ## 文件
 
-- `dist/index.html`：页面结构、中文文案和对话框。
-- `dist/style.css`：视觉系统、移动端适配和动效。
-- `dist/flower.js`：首页/本机预置花型、独立几何分流、渲染、绽放、拖动、缩放、照片取色和 GLB 导出。
-- `dist/geometry.js` / `dist/geometry.css`：通用几何编译器、曲面厚度、结构校验、自动取景和详情结构展示。
-- `dist/ai.js`：OpenAI 兼容图片请求、视觉验证和独立空间几何生成。
-- `dist/ai-settings.js` / `dist/ai-settings.css`：AI 配置对话框及移动端样式。
-- `dist/app.js`：藏品、拍照、AI 创作、音乐、资产导出、信笺和滚动交互。
-- `dist/assets/peony.webp`：使用内置 imagegen 生成的芍药照片素材。
-- `dist/assets/garden-serif.woff2`：在本机从 Noto Serif CJK SC 裁剪的网页字体；没有向字体服务发送姓名或页面文字。
-- `.openai/hosting.json`：Sites 的私有站点标识与静态发布目录。
+- `dist/index.html` / `dist/style.css`：页面结构、视觉与移动端布局。
+- `dist/assets/flowers/*.svg` / `dist/flower-assets.js`：精细植物矢量原稿与内联资源。
+- `dist/flower.js` / `dist/svg.css`：SVG 展示、轻转、缩放、绽放、本机取色与导出。
+- `dist/effects.js`：共享播放锁、自然花瓣轨迹及动画完成清理。
+- `dist/svg.js`：静态 SVG 校验、统计与实例 ID 隔离。
+- `dist/legacy-svg.js`：旧藏品的本机矢量转绘。
+- `dist/ai.js`：视觉验证、精细 SVG system prompt、图片请求与响应校验。
+- `dist/ai-settings.js` / `dist/ai-settings.css`：模型设置。
+- `dist/app.js`：藏品、拍照、AI 绘制、音乐、导出与信笺交互。
+- `dist/assets/peony.webp`：原有 imagegen 芍药照片，用于采集区与示例。
+- `dist/assets/*.woff2`：随站点打包的字体，许可文本同目录保存。
+- `.openai/hosting.json`：原有 Sites 身份和静态发布目录，保持原访问范围。
 
-## 花卉素材提示词
-
-使用内置 imagegen，未使用 CLI/API 后备路径。以下为最终提示词，输出图像已存入项目并压缩为 WebP：
-
-> Use case: photorealistic-natural. Asset type: editorial floral photograph for a romantic private garden website, used on one side of a camera / flower collection section. Create one exquisitely beautiful pale blush pink garden peony, many translucent silk-like petals, a slender curved dark olive green stem, two or three richly textured green leaves. Resting naturally across softly textured warm ivory artist paper. Close crop with a few tiny fallen pink petals nearby, dappled soft morning sunlight and delicate natural shadows. Refined Japanese botanical editorial, analog film texture, restrained graceful romantic mood. Tall portrait composition, main flower in upper middle, stem diagonally toward lower right. Colors muted creamy white, palest ballet pink, olive and sage green. Real photograph, very tactile petal detail, no drawing, no text, no watermarks, no human hands, no vases, no UI. Aspect ratio portrait 2:3.
-
-Three.js 使用 MIT 许可；Noto Serif CJK 与 Cormorant 使用 SIL Open Font License。许可文本随资源保存。
+Noto Serif CJK 与 Cormorant 使用 SIL Open Font License，许可随字体保存。

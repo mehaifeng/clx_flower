@@ -1,4 +1,4 @@
-import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js?v=geometry-3';
+import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js?v=svg-1';
 
 export function createAISettings({notify, onChange, onOpen, onClose}) {
   const $ = selector => document.querySelector(selector);
@@ -78,7 +78,7 @@ export function createAISettings({notify, onChange, onOpen, onClose}) {
   $('#clear-ai-settings').addEventListener('click', () => {
     config = null; draft = null; preferences = {}; try { localStorage.removeItem(preferenceKey); } catch {}
     $('#ai-api-key').value = ''; $('#ai-model').value = ''; $('#ai-base-url').value = 'https://api.openai.com/v1'; $('#ai-model-options').replaceChildren(); $('#ai-active-model').textContent = '尚未启用 AI 创作';
-    verification('idle'); message('配置已清除。藏品仍在花园里，可继续使用本机艺术建模。'); onChange(null);
+    verification('idle'); message('配置已清除。藏品仍在花园里，可继续使用本机 SVG 绘制。'); onChange(null);
   });
   return {open, getConfig: () => config, isReady: () => isVerified(config)};
 }
