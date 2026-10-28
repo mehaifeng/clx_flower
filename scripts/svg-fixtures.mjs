@@ -10,5 +10,5 @@ function flower(spider){
  for(let i=0;i<8;i++)paths.push(`<circle cx="${231+i*2}" cy="210" r="1.6" fill="#aa7f3d"/>`);
  return start+paths.join('')+'</svg>';
 }
-export const lilySVG={isFlower:true,species:'百合',name:'向晚的百合',note:'这一朵想留给你。',color:'#d99aae',shapeDescription:'六片反卷的花被，细致的花脉与狭长叶片。',svg:flower(false)};
+export const lilySVG={schemaVersion:1,isFlower:true,species:'百合',name:'向晚的百合',note:'这一朵想留给你。',color:'#d99aae',shapeDescription:'六片反卷的花被，细致的花脉与狭长叶片。',svg:flower(false)};
 export const spiderSVG={...lilySVG,species:'蜘蛛菊',name:'细细的花火',svg:flower(true)};

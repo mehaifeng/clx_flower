@@ -1,6 +1,6 @@
-import {FLOWER_ART} from './flower-assets.js?v=svg-1';
-import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=svg-1';
-import {legacyGeometrySVG} from './legacy-svg.js?v=svg-1';
+import {FLOWER_ART} from './flower-assets.js?v=svg-2';
+import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=svg-2';
+import {legacyGeometrySVG} from './legacy-svg.js?v=svg-2';
 
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 let serial=0;

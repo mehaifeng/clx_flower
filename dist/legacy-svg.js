@@ -1,5 +1,5 @@
 // One-time vector conversion of existing collections; no WebGL or mesh runtime.
-import {sanitizeSVG} from './svg.js?v=svg-1';
+import {sanitizeSVG} from './svg.js?v=svg-2';
 const fmt=n=>Number(n.toFixed(2));
 const color=value=>/^#[\da-f]{6}$/i.test(value||'')?value:'#d99aae';
 export function legacyGeometrySVG(geometry){
