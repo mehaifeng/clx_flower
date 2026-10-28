@@ -27,6 +27,10 @@ assert(!JSON.stringify(asset).includes(config.apiKey));assert(!JSON.stringify(as
 let called=false;await assert.rejects(generateFlowerAsset({...verified},image,{fetcher:()=>called=true}),e=>e.code==='unverified');assert(!called);
 await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>response({items:[]})}),e=>e.code==='no_vision');await assert.rejects(generateFlowerAsset(verified,image,{fetcher:generationResponse({isFlower:false})}),e=>e.code==='not_flower');
 const alternate=await generateFlowerAsset(verified,image,{fetcher:generationResponse(spiderSVG)});assert.equal(asset.color,alternate.color);assert.notEqual(asset.svgHash,alternate.svgHash);assert.notEqual(asset.svgStats.paths,alternate.svgStats.paths);
+const emptyFragment={...lilySVG,svg:lilySVG.svg.replace('</svg>','<></svg>')};
+assert.throws(()=>sanitizeSVG(emptyFragment.svg),e=>e.code==='invalid_svg','The SVG parser itself must still reject malformed XML');
+assert.equal(sanitizeFlowerRecipe(emptyFragment).svg,sanitizeFlowerRecipe(lilySVG).svg,'Only empty model fragments between elements can be normalized without changing artwork');
+for(const fragment of ['<unexpected/>','<script/>','<g>','<path d="M1 1"'])assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,svg:lilySVG.svg.replace('</svg>',fragment+'</svg>')}),e=>e.code==='invalid_svg');
 console.log('PASS · Real system-role SVG instructions, image payload, verified vision gate and distinct authored vector outputs (mock provider)');
 // The classification request must finish successfully before a drawing request can exist.
 for(const assessment of [
@@ -54,6 +58,34 @@ let drawingCalls=0;await generateFlowerAsset(verified,image,{approval,fetcher:as
 const abortAfterCheck=new AbortController();let cancelCalls=0;
 await assert.rejects(generateFlowerAsset(verified,image,{signal:abortAfterCheck.signal,fetcher:async()=>{cancelCalls++;abortAfterCheck.abort();return response(approved);}}),e=>e.code==='aborted');assert.equal(cancelCalls,1);
 let unsupportedSchema=0;await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{const body=JSON.parse(options.body);unsupportedSchema++;if(unsupportedSchema===1){assert(body.response_format);return new Response(JSON.stringify({error:{message:'response_format json_schema is not supported'}}),{status:400});}assert(!body.response_format);return response(approved);}});assert.equal(unsupportedSchema,2);
+// Regression: MiniMax rejects numeric schema enums before invoking the model.
+for(const [baseUrl,model,effort] of [
+ ['https://api.minimax.cn/v1','MiniMax-M3.1-Flash','medium'],
+ ['https://api.minimax.io/v1','minimax-m3.1-flash','medium'],
+ ['https://api.minimax.cn/v1','MiniMax-M3',undefined],
+ ['https://vision.example.test/v1','MiniMax-M3.1-Flash',undefined],
+ ['https://api.minimax.cn.example.test/v1','MiniMax-M3.1-Flash',undefined],
+])await verifyVision({...config,baseUrl,model},{challenge,fetcher:async(url,options)=>{const body=JSON.parse(options.body);assert.equal(body.reasoning_effort,effort);assert(!('thinking' in body));return response({items:expected});}});
+for(const format of [SUBJECT_RESPONSE_FORMAT,FLOWER_RESPONSE_FORMAT]){
+ assert.deepEqual(format.json_schema.schema.properties.schemaVersion,{type:'integer'});
+ for(const property of Object.values(format.json_schema.schema.properties))if(property.enum)assert(property.enum.every(value=>typeof value==='string'));
+}
+const minimaxMismatch='invalid params, Mismatch type string with value number "at index 260: mismatched type with value: integer, enum:[1], mainSubject" (2013)';
+for(const envelope of ['error','base_resp']){
+ let calls=0;await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{
+  const body=JSON.parse(options.body);calls++;
+  if(calls===1){assert(body.response_format);return new Response(JSON.stringify(envelope==='error'?{error:{type:'bad_request_error',message:minimaxMismatch,http_code:'400'}}:{base_resp:{status_code:2013,status_msg:minimaxMismatch}}),{status:envelope==='error'?400:200});}
+  assert(!body.response_format);return response(approved);
+ }});assert.equal(calls,2);
+}
+let invalidSchemaCalls=0;
+await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{invalidSchemaCalls++;if(invalidSchemaCalls===1)return new Response(JSON.stringify({message:'Invalid parameter response_format.json_schema'}),{status:400});assert(!JSON.parse(options.body).response_format);return response(approved);}});assert.equal(invalidSchemaCalls,2);
+let unrelated400Calls=0;
+await assert.rejects(assessFlowerSubject(verified,image,{fetcher:async()=>{unrelated400Calls++;return new Response(JSON.stringify({error:{message:'invalid params: image too large '+config.apiKey+' (2013)',http_code:'400'}}),{status:400});}}),e=>e.stage==='subject_check'&&e.message.includes('花卉主体识别失败')&&e.message.includes('2013')&&!e.message.includes(config.apiKey));assert.equal(unrelated400Calls,1,'Unrelated 400 errors must not trigger schema fallback');
+await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({error:{message:'invalid params: max_completion_tokens exceeds maximum (2013)'}}),{status:400})}),e=>e.stage==='svg_generation'&&e.code==='token_limit'&&e.message.includes('SVG 绘制失败'));
+await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({choices:[{message:{content:'{"svg":"<svg fill="pink"/>"}'}}]}))}),e=>e.stage==='svg_generation'&&e.code==='invalid_response'&&e.message.includes('SVG 绘制失败'));
+await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>new Response(JSON.stringify({base_resp:{status_code:1004,status_msg:'not authorized '+config.apiKey}}),{status:200})}),e=>e.code==='authentication'&&!e.message.includes(config.apiKey));
+console.log('PASS · MiniMax numeric-enum regression, 2013 error envelopes, bounded schema fallback, per-stage diagnostics and redaction');
 let paidInvalid=0;await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>{paidInvalid++;return response({...lilySVG,svg:'broken'});}}),e=>e.code==='invalid_svg');assert.equal(paidInvalid,1,'Successful invalid output is not automatically billed again');
 await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content:'{"schemaVersion":1'}}]}))}),e=>e.code==='truncated');
 assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,schemaVersion:2}),e=>e.code==='invalid_response');assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,extra:1}),e=>e.code==='invalid_response');assert.throws(()=>parseModelJSON('Here is the result {"ok":true}'));

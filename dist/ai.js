@@ -1,7 +1,7 @@
 // OpenAI-compatible vision requests. Keys and verification receipts stay in memory.
 const verifiedConfigurations = new WeakSet();
 const approvedSubjects = new WeakMap();
-import {sanitizeSVG, inspectSVG} from './svg.js?v=svg-2';
+import {sanitizeSVG, inspectSVG} from './svg.js?v=svg-3';
 
 export class AIError extends Error {
   constructor(message, code = 'ai_error') { super(message); this.name = 'AIError'; this.code = code; }
@@ -26,15 +26,41 @@ export function normalizeConfiguration(input) {
   return { baseUrl, apiKey, model };
 }
 
+function serviceFailure(body){
+  const message=String(body?.error?.message||body?.base_resp?.status_msg||body?.message||(typeof body?.error==='string'?body.error:''));
+  const rawCode=body?.base_resp?.status_code||body?.error?.code||message.match(/\((\d{3,6})\)\s*$/)?.[1];
+  const code=/^\d{1,6}$/.test(String(rawCode))?Number(rawCode):null;
+  return {message:message.toLowerCase(),code,param:typeof body?.error?.param==='string'?body.error.param:''};
+}
+function schemaRejected(failure){
+  const detail=failure.message;
+  const named=/response_format|json_schema|json schema/.test(detail)||failure.param.startsWith('response_format');
+  const rejected=/unsupported|unknown|unrecognized|not.*support|invalid|unexpected|not allowed|不支持|无效/.test(detail);
+  // MiniMax 2013 reports the schema location as a JSON fragment, without naming
+  // response_format: numeric enum values are parsed as strings by that gateway.
+  const numericEnum=/mismatch(?:ed)? type string with value number/.test(detail)&&/\benum\b/.test(detail);
+  return named&&rejected||numericEnum;
+}
+function failureStatus(response,body,failure){
+  if(!response.ok)return response.status;
+  if([1004,2049].includes(failure.code))return 401;
+  if([1002,1008,2053,2056,2062,2067].includes(failure.code))return 429;
+  if(failure.code===2022)return 404;
+  const http=Number(body?.error?.http_code);return http>=400&&http<=599?http:400;
+}
 function serviceError(status, body) {
-  const detail = String(body?.error?.message || body?.message || '').toLowerCase();
-  if (status === 401) return new AIError('API Key 未通过验证，请检查密钥后重试。', 'authentication');
-  if (status === 403) return new AIError('这个密钥没有访问所选模型的权限。', 'permission');
-  if (status === 404) return new AIError('接口或模型不存在，请核对 Base URL 和模型 ID。', 'not_found');
-  if (status === 429) return new AIError('服务限流或额度不足，请检查账户额度后重试。', 'rate_limit');
-  if (status >= 500) return new AIError('模型服务暂时不可用，请稍后重试。', 'provider');
-  if (/vision|image_url|image input|image.*support|multimodal/.test(detail)) return new AIError('所选模型或接口不支持图片输入，请更换带有视觉能力的模型。', 'no_vision');
-  return new AIError(`模型请求未成功（HTTP ${status}），请检查地址、模型与协议配置。`, 'request');
+  const failure=serviceFailure(body),detail=failure.message;
+  const suffix=`（HTTP ${status}${failure.code?`，服务代码 ${failure.code}`:''}）`;
+  const error=(message,code)=>new AIError(message+suffix,code);
+  if (status === 401) return error('API Key 未通过验证，请检查密钥后重试。', 'authentication');
+  if (status === 403) return error('这个密钥没有访问所选模型的权限。', 'permission');
+  if (status === 404) return error('接口或模型不存在，请核对 Base URL 和模型 ID。', 'not_found');
+  if (status === 429) return error('服务限流或额度不足，请检查账户额度后重试。', 'rate_limit');
+  if (status >= 500) return error('模型服务暂时不可用，请稍后重试。', 'provider');
+  if(schemaRejected(failure))return error('模型服务不接受当前结构化输出参数，兼容请求也未通过。请检查服务对 JSON 输出的支持。','schema_unsupported');
+  if(/max_completion_tokens|max_tokens/.test(detail))return error('模型服务拒绝了输出长度参数，请核对模型允许的 token 上限。','token_limit');
+  if (/vision|image_url|image input|image.*support|multimodal/.test(detail)) return error('所选模型或接口不支持当前图片输入，请检查模型和图片格式。', 'no_vision');
+  return error('模型服务拒绝了请求参数，未开始或完成本阶段处理。请核对该服务的接口协议。', 'request');
 }
 
 async function requestJSON(config, path, { body, signal, timeout = 90000, fetcher = globalThis.fetch } = {}) {
@@ -52,20 +78,20 @@ async function requestJSON(config, path, { body, signal, timeout = 90000, fetche
     });
     let result;
     try { result = await response.json(); } catch { throw new AIError('服务返回的内容不是有效 JSON，请检查 Base URL 是否指向 API。', 'invalid_response'); }
-    if (!response.ok) {
-      const message = String(result?.error?.message || '').toLowerCase();
+    if (!response.ok || result?.error || Number(result?.base_resp?.status_code)>0) {
+      const failure=serviceFailure(result),message=failure.message,status=failureStatus(response,result,failure);
       // Retry only a rejected token-limit parameter, never a paid successful response.
-      if (response.status === 400 && body?.max_completion_tokens && /max_completion_tokens/.test(message) && /unsupported|unknown|unrecognized|not.*support|不支持/.test(message)) {
+      if (status === 400 && body?.max_completion_tokens && /max_completion_tokens/.test(message) && /unsupported|unknown|unrecognized|not.*support|不支持/.test(message)) {
         const compatible = { ...body, max_tokens: body.max_completion_tokens }; delete compatible.max_completion_tokens;
         return await requestJSON(config, path, { body: compatible, signal: controller.signal, timeout, fetcher });
       }
       // Compatibility fallback only after an explicit rejected schema parameter.
       // Successful (potentially billed) responses are never replayed automatically.
-      if(response.status===400&&body?.response_format&&/response_format|json_schema/.test(message)&&/unsupported|unknown|unrecognized|not.*support|不支持/.test(message)){
+      if(status===400&&body?.response_format&&schemaRejected(failure)){
         const compatible={...body};delete compatible.response_format;
         return await requestJSON(config,path,{body:compatible,signal:controller.signal,timeout,fetcher});
       }
-      throw serviceError(response.status, result);
+      throw serviceError(status, result);
     }
     return result;
   } catch (error) {
@@ -89,9 +115,13 @@ export function parseModelJSON(text) {
 }
 
 async function imageCompletion(config, image, instruction, options = {}) {
+  try{
   if (!/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(image) || image.length > 8 * 1024 * 1024) throw new AIError('照片格式不适用，请重新选择 JPG、PNG 或 WebP 图片。', 'invalid_image');
   const result = await requestJSON(config, '/chat/completions', { ...options, body: {
     model: config.model, stream: false, max_completion_tokens: options.tokenLimit || 4096,
+    // Flash defaults to max thinking; use its documented balanced setting so
+    // illustration requests leave enough time and tokens for the SVG itself.
+    ...(/^minimax-m3\.1-flash$/i.test(config.model)&&['api.minimax.cn','api.minimax.io'].includes(new URL(config.baseUrl).hostname)?{reasoning_effort:'medium'}:{}),
     ...(options.responseFormat?{response_format:options.responseFormat}:{}),
     messages: [...(options.systemPrompt ? [{role:'system',content:options.systemPrompt}] : []), { role: 'user', content: [
       { type: 'text', text: instruction },
@@ -103,6 +133,11 @@ async function imageCompletion(config, image, instruction, options = {}) {
   if (message?.refusal) throw new AIError('模型未能处理这张图片，请换一张清晰的鲜花照片。', 'refusal');
   const content = Array.isArray(message?.content) ? message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : message?.content;
   return parseModelJSON(content);
+  }catch(error){
+    const label={vision_test:'图片输入验证',subject_check:'花卉主体识别',svg_generation:'SVG 绘制'}[options.stage];
+    if(error instanceof AIError&&label){error.stage=options.stage;error.message=`${label}失败：${error.message}`;}
+    throw error;
+  }
 }
 
 export function createVisionChallenge() {
@@ -130,7 +165,7 @@ export function createVisionChallenge() {
 
 export async function verifyVision(input, options = {}) {
   const config = normalizeConfiguration(input), challenge = options.challenge || createVisionChallenge();
-  const answer = await imageCompletion(config, challenge.image, 'Look at the attached image. List the four colored shapes from LEFT to RIGHT. Allowed colors: red, blue, green, purple, orange, yellow. Allowed shapes: circle, square, triangle, star. Return ONLY a JSON object: {"items":[{"color":"...","shape":"..."}, ...]}. If you cannot see the image, return {"items":[]}; do not guess.', { ...options, timeout: options.timeout || 45000, tokenLimit: 2400 });
+  const answer = await imageCompletion(config, challenge.image, 'Look at the attached image. List the four colored shapes from LEFT to RIGHT. Allowed colors: red, blue, green, purple, orange, yellow. Allowed shapes: circle, square, triangle, star. Return ONLY a JSON object: {"items":[{"color":"...","shape":"..."}, ...]}. If you cannot see the image, return {"items":[]}; do not guess.', { ...options, stage:'vision_test', timeout: options.timeout || 45000, tokenLimit: 2400 });
   if (!Array.isArray(answer.items) || answer.items.length !== 4 || !answer.items.every((item, i) => typeof item?.color === 'string' && typeof item?.shape === 'string' && item.color.toLowerCase() === challenge.expected[i].color && item.shape.toLowerCase() === challenge.expected[i].shape)) throw new AIError('视觉验证未通过：模型没有正确读取测试图片。请更换视觉模型，或重新验证。', 'no_vision');
   const verified = Object.freeze({ ...config, verifiedAt: Date.now() });
   verifiedConfigurations.add(verified); return verified;
@@ -156,8 +191,9 @@ const subjectProperties={schemaVersion:{type:'integer',enum:[1]},mainSubject:{ty
 const flowerProperties={schemaVersion:{type:'integer',enum:[1]},isFlower:{type:'boolean'},species:{type:'string',maxLength:40},name:{type:'string',maxLength:24},note:{type:'string',maxLength:80},color:{type:'string',maxLength:7},shapeDescription:{type:'string',maxLength:240},svg:{type:'string',maxLength:180000}};
 function responseFormat(name,properties){
   // Keep the wire schema within the common structured-output subset; enforce
-  // lengths and numeric ranges locally, including on fine-tuned/compatible models.
-  const wireProperties=Object.fromEntries(Object.entries(properties).map(([key,schema])=>[key,{type:schema.type,...(schema.enum?{enum:schema.enum}:{})}]));
+  // lengths, numeric ranges and schemaVersion=1 locally. Numeric enums trigger
+  // a MiniMax 2013 parser error even when the surrounding schema is accepted.
+  const wireProperties=Object.fromEntries(Object.entries(properties).map(([key,schema])=>[key,{type:schema.type,...(schema.type==='string'&&schema.enum?{enum:schema.enum}:{})}]));
   return {type:'json_schema',json_schema:{name,strict:true,schema:{type:'object',properties:wireProperties,required:Object.keys(properties),additionalProperties:false}}};
 }
 export const SUBJECT_RESPONSE_FORMAT=responseFormat('flower_subject_assessment',subjectProperties);
@@ -175,7 +211,7 @@ export function sanitizeSubjectAssessment(value){
 }
 export async function assessFlowerSubject(config,image,options={}){
   if(!isVerified(config))throw new AIError('请先配置并验证视觉模型，确认照片主体是花卉后才能绘制。','unverified');
-  const answer=await imageCompletion(config,image,'请只判断这张照片的主要拍摄对象是否为真实花卉，并返回规定的识别 JSON；不要生成 SVG。',{...options,systemPrompt:SUBJECT_SYSTEM_PROMPT,responseFormat:SUBJECT_RESPONSE_FORMAT,tokenLimit:1600,timeout:options.timeout||45000});
+  const answer=await imageCompletion(config,image,'请只判断这张照片的主要拍摄对象是否为真实花卉，并返回规定的识别 JSON；不要生成 SVG。',{...options,stage:'subject_check',systemPrompt:SUBJECT_SYSTEM_PROMPT,responseFormat:SUBJECT_RESPONSE_FORMAT,tokenLimit:1600,timeout:options.timeout||45000});
   const assessment=sanitizeSubjectAssessment(answer),receipt=Object.freeze({...assessment,reason:assessment.reason.split(config.apiKey).join('[已隐藏]')});
   approvedSubjects.set(receipt,{config,image,expiresAt:Date.now()+5*60*1000});return receipt;
 }
@@ -188,7 +224,11 @@ export function sanitizeFlowerRecipe(value) {
   if (value?.isFlower !== true) throw new AIError('这张照片里没有识别到清晰的鲜花，请让一朵花靠近镜头再试。', 'not_flower');
   if(value.schemaVersion!==1||Object.keys(value).length!==Object.keys(flowerProperties).length||Object.keys(value).some(k=>!(k in flowerProperties))||Object.entries(flowerProperties).some(([key,schema])=>schema.type==='string'&&(typeof value[key]!=='string'||value[key].length>schema.maxLength))||!value.species.trim()||!value.name.trim()||!value.shapeDescription.trim()||!/^#[a-f\d]{6}$/i.test(value.color))throw new AIError('模型输出不符合花卉 SVG 的固定 JSON 结构，本次未保存。请重试。','invalid_response');
   let svg;
-  try { svg = sanitizeSVG(value.svg, {detailed:true}); }
+  // A model may insert an empty JSX fragment between real SVG elements. It has
+  // no content or attributes: discard only that token, then validate everything.
+  // Do not repair actual tags, paths, attributes, references or unsafe content.
+  const source=value.svg.replace(/(>)\s*<\/?>\s*(?=<)/g,'$1');
+  try { svg = sanitizeSVG(source, {detailed:true}); }
   catch (error) { throw new AIError(error.message || '模型没有生成完整、精细的 SVG，请重试。', 'invalid_svg'); }
   return {
     type:'svg', svg, svgStats:inspectSVG(svg), color:value.color.toLowerCase(),
@@ -208,7 +248,7 @@ Allowed SVG tags: svg, g, defs, path, circle, ellipse, line, polyline, polygon, 
 
 Return ONLY one JSON object with valid escaped strings, without Markdown fences:
 {"schemaVersion":1,"isFlower":true,"species":"Chinese species name or 鲜花 if uncertain","name":"short poetic Chinese title","note":"romantic Chinese sentence, max 80 chars","color":"#RRGGBB dominant petal color","shapeDescription":"Chinese explanation of observed shapes, layering and details","svg":"<svg ...>COMPLETE detailed SVG code</svg>"}
-All eight fields are required and additional fields are forbidden. Escape every SVG quotation mark correctly inside the JSON string. The photograph has passed a separate main-subject check; still refuse if the subject is not clearly a real flower. In that case return {"schemaVersion":1,"isFlower":false,"species":"","name":"","note":"","color":"","shapeDescription":"","svg":""}. Never select from a flower template or substitute a generic flower. Do not return a successful result without complete SVG code.`;
+All eight fields are required and additional fields are forbidden. Use SINGLE QUOTES for all XML attribute values inside the svg string (for example <path fill='#ef9ca9' d='M ...'/>), and compose the SVG on ONE LINE. This avoids unescaped double quotes and literal line breaks inside the JSON string. JSON property names and strings still use DOUBLE QUOTES. Any remaining double quotes or line breaks in string content must be escaped correctly. The photograph has passed a separate main-subject check; still refuse if the subject is not clearly a real flower. In that case return {"schemaVersion":1,"isFlower":false,"species":"","name":"","note":"","color":"","shapeDescription":"","svg":""}. Never select from a flower template or substitute a generic flower. Do not return a successful result without complete SVG code.`;
 
 export async function generateFlowerAsset(config, image, options = {}) {
   if (!isVerified(config)) throw new AIError('请先在 AI 创作设置中验证视觉模型。', 'unverified');
@@ -216,7 +256,7 @@ export async function generateFlowerAsset(config, image, options = {}) {
   if(approval&&!isApprovedSubject(approval,config,image))throw new AIError('照片或模型已变化，请重新识别花卉主体后再绘制。','unverified_subject');
   if(!approval)approval=await assessFlowerSubject(config,image,options);
   if(options.signal?.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
-  const answer = await imageCompletion(config,image,'请根据这张鲜花照片，绘制精细的植物 SVG 插画。请直接在 JSON 的 svg 字段输出完整 SVG 代码，细致保留花瓣层次、卷曲边缘、渐变明暗、叶脉和花蕊。',{...options,systemPrompt:FLOWER_SYSTEM_PROMPT,responseFormat:FLOWER_RESPONSE_FORMAT,tokenLimit:16000,timeout:options.timeout||180000});
+  const answer = await imageCompletion(config,image,'请根据这张鲜花照片，绘制精细的植物 SVG 插画。请直接在 JSON 的 svg 字段输出完整 SVG 代码，细致保留花瓣层次、卷曲边缘、渐变明暗、叶脉和花蕊。',{...options,stage:'svg_generation',systemPrompt:FLOWER_SYSTEM_PROMPT,responseFormat:FLOWER_RESPONSE_FORMAT,tokenLimit:16000,timeout:options.timeout||180000});
   // Redact even a provider that unexpectedly echoes the key into artwork metadata.
   const clean = JSON.parse(JSON.stringify(answer).split(config.apiKey).join('[已隐藏]'));
   const recipe = sanitizeFlowerRecipe(clean);

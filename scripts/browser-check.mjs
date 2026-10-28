@@ -1,6 +1,6 @@
-import {validateSVGRendering} from '../dist/svg-render.js?v=svg-2';
+import {validateSVGRendering} from '../dist/svg-render.js?v=svg-3';
 import {FLOWER_ART} from '../dist/flower-assets.js';
-import {verifyVision,generateFlowerAsset,assessFlowerSubject,SUBJECT_SYSTEM_PROMPT} from '../dist/ai.js?v=svg-2';
+import {verifyVision,generateFlowerAsset,assessFlowerSubject,SUBJECT_SYSTEM_PROMPT} from '../dist/ai.js?v=svg-3';
 import {lilySVG} from './svg-fixtures.mjs';
 const out=document.querySelector('#result'),button=document.querySelector('#run');
 function assert(condition,message){if(!condition)throw new Error(message);}

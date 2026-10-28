@@ -1,4 +1,4 @@
-import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js?v=svg-2';
+import {normalizeConfiguration, verifyVision, readModelCatalog, isVerified} from './ai.js?v=svg-3';
 
 export function createAISettings({notify, onChange, onOpen, onClose}) {
   const $ = selector => document.querySelector(selector);
@@ -15,8 +15,8 @@ export function createAISettings({notify, onChange, onOpen, onClose}) {
   function message(text = '', error = false) { $('#ai-settings-status').textContent = text; $('#ai-settings-status').classList.toggle('error', error); }
   function verification(state) {
     $('#ai-verification').dataset.state = state;
-    $('#ai-verify-title').textContent = state === 'success' ? '视觉验证通过，可以一起创作了' : state === 'busy' ? '正在确认，它真的看得见' : state === 'error' ? '还没有通过视觉验证' : '先确认，它真的看得见花';
-    $('#ai-verify-description').textContent = state === 'success' ? '所选模型已正确读取随机测试图片。' : state === 'busy' ? '正在将随机图形发送到你填写的服务。' : '使用随机图形测试图片输入，通过后才可保存使用。';
+    $('#ai-verify-title').textContent = state === 'success' ? '图片输入验证通过' : state === 'busy' ? '正在确认，它真的看得见' : state === 'error' ? '还没有通过视觉验证' : '先确认，它真的看得见花';
+    $('#ai-verify-description').textContent = state === 'success' ? '模型已正确读取随机图形；照片生成时还会检查花卉主体与 SVG。' : state === 'busy' ? '正在将随机图形发送到你填写的服务。' : '使用随机图形测试图片输入，通过后才可保存使用。';
     $('#save-ai-settings').disabled = pending || !matchingDraft();
   }
   function busy(value) {

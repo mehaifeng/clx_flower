@@ -1,4 +1,4 @@
-import {sanitizeSVG,SVGError} from './svg.js?v=svg-2';
+import {sanitizeSVG,SVGError} from './svg.js?v=svg-3';
 
 // Validate the final asset using the same browser SVG decoder used for thumbnails/PNG export.
 export async function validateSVGRendering(input,{signal,timeout=8000}={}){

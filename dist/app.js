@@ -1,10 +1,10 @@
-import { FlowerScene, getThumbnail, getFlowerSVG, analysePhoto, exportFlowerSVG } from './flower.js?v=svg-2';
-import { generateFlowerAsset, assessFlowerSubject, isApprovedSubject, AIError } from './ai.js?v=svg-2';
-import { createAISettings } from './ai-settings.js?v=svg-2';
+import { FlowerScene, getThumbnail, getFlowerSVG, analysePhoto, exportFlowerSVG } from './flower.js?v=svg-3';
+import { generateFlowerAsset, assessFlowerSubject, isApprovedSubject, AIError } from './ai.js?v=svg-3';
+import { createAISettings } from './ai-settings.js?v=svg-3';
 
-import {inspectSVG} from './svg.js?v=svg-2';
-import {validateSVGRendering} from './svg-render.js?v=svg-2';
-import {singleFlight, scatterPetals} from './effects.js?v=svg-2';
+import {inspectSVG} from './svg.js?v=svg-3';
+import {validateSVGRendering} from './svg-render.js?v=svg-3';
+import {singleFlight, scatterPetals} from './effects.js?v=svg-3';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
