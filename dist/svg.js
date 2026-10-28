@@ -1,5 +1,5 @@
 // A deliberately small, passive SVG dialect. Model output is never executable.
-import {validateAttribute} from './svg-grammar.js?v=minimax-1';
+import {validateAttribute} from './svg-grammar.js?v=cloudflare-2';
 const NS = 'http://www.w3.org/2000/svg';
 const tags = new Set(['svg','g','defs','path','circle','ellipse','line','polyline','polygon','rect','linearGradient','radialGradient','stop','clipPath','mask','title','desc']);
 const attributes = new Set(('xmlns id viewBox width height x y x1 x2 y1 y2 cx cy r rx ry d points transform fill stroke stroke-width stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset fill-rule clip-rule opacity fill-opacity stroke-opacity offset stop-color stop-opacity gradientUnits gradientTransform spreadMethod fx fy fr href clip-path mask maskUnits maskContentUnits clipPathUnits preserveAspectRatio data-part').split(' '));

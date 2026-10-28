@@ -19,7 +19,8 @@ for(const [,ref] of html.matchAll(/(?:src|href)="([^"]+)"/g)){
 for(const [,ref] of css.matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing CSS asset ${ref}`);
 for(const [,id] of app.matchAll(/\$\(['"]#([\w-]+)['"]/g))assert(ids.includes(id),`Missing interaction element #${id}`);
 for(const [,value] of html.matchAll(/(?:aria-labelledby|aria-controls)="([^"]+)"/g))for(const ref of value.split(' '))assert(ids.includes(ref),`Missing accessibility reference ${ref}`);
-const versions=[...app.matchAll(/from ['"]\.\/ai\.js([^'"]*)['"]/g)].map(m=>m[1]);assert.equal(new Set(versions).size,1,'Settings and generation share the verification receipt');
+const versions=[...app.matchAll(/from ['"]\.\/managed-ai\.js([^'"]*)['"]/g)].map(m=>m[1]);assert.equal(versions.length,2);assert.equal(new Set(versions).size,1,'Settings and generation share the managed API client');
+assert(!html.includes('ai-api-key'),'Visitors use the garden passcode, never a provider key');
 for(const file of readdirSync(dist).filter(n=>n.endsWith('.js'))){
  const source=read(file);execFileSync(process.execPath,['--check',resolve(dist,file)]);
  for(const [,ref] of source.matchAll(/from ['"]([^'"]+)['"]/g))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing module ${ref}`);

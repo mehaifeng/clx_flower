@@ -9,11 +9,11 @@
   <meta property="og:description" content="花有花期，喜欢你没有。送你一座永不落幕的小花园。">
   <title>予你花园 · For Linxuan</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=minimax-1">
-  <link rel="stylesheet" href="ai-settings.css?v=minimax-1">
-  <link rel="stylesheet" href="svg.css?v=minimax-1">
-  <link rel="modulepreload" href="flower.js?v=minimax-1">
-  <script type="module" src="app.js?v=minimax-1"></script>
+  <link rel="stylesheet" href="style.css?v=cloudflare-2">
+  <link rel="stylesheet" href="ai-settings.css?v=cloudflare-2">
+  <link rel="stylesheet" href="svg.css?v=cloudflare-2">
+  <link rel="modulepreload" href="flower.js?v=cloudflare-2">
+  <script type="module" src="app.js?v=cloudflare-2"></script>
 </head>
 <body>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -107,8 +107,8 @@
   <nav class="mobile-nav" aria-label="手机导航"><a class="mobile-nav-item active" href="#garden"><svg class="icon"><use href="#i-flower"/></svg><span>花园</span></a><a class="mobile-nav-item" href="#collection"><svg class="icon"><use href="#i-grid"/></svg><span>藏花</span></a><button class="mobile-camera open-capture" aria-label="拍花入藏"><svg class="icon"><use href="#i-camera"/></svg></button><a class="mobile-nav-item" href="#capture"><svg class="icon"><use href="#i-sparkle"/></svg><span>采集</span></a><a class="mobile-nav-item" href="#letter"><svg class="icon"><use href="#i-mail"/></svg><span>信笺</span></a></nav>
 
   <dialog class="capture-dialog" id="capture-dialog" aria-labelledby="capture-dialog-title"><div class="dialog-top"><span class="eyebrow">CAPTURE A LITTLE LOVE</span><button class="icon-button close-capture" aria-label="关闭拍花入藏"><svg class="icon"><use href="#i-close"/></svg></button></div><h2 id="capture-dialog-title">留住一朵，<em>真实的心动。</em></h2><p class="dialog-intro">拍下花的颜色与姿态，让它在小花园里再次绽放。</p><div class="capture-view" id="capture-view"><div class="capture-empty" id="capture-empty"><svg class="icon"><use href="#i-camera"/></svg><span>把一朵喜欢的花，放进画面里</span><small>也可以先用示例花朵，体验一次绽放</small></div><video id="camera-video" autoplay playsinline muted hidden aria-label="实时相机画面"></video><img id="photo-preview" alt="你选择的鲜花照片" hidden><div class="capture-viewfinder" aria-hidden="true"></div><button class="shutter-button" id="shutter-button" hidden aria-label="拍摄照片"><span></span></button></div><p class="capture-status" id="capture-status" role="status"></p><div class="photo-source-actions" id="photo-source-actions"><button class="button button-dark" id="start-camera"><svg class="icon"><use href="#i-camera"/></svg>打开相机</button><button class="button button-outline" id="choose-photo"><svg class="icon"><use href="#i-image"/></svg>从相册选择</button><button class="text-button demo-button" id="try-demo">体验示例花朵 <svg class="icon"><use href="#i-arrow"/></svg></button></div><form id="capture-form" hidden>
-    <div class="creation-mode"><span class="creation-label"><svg class="icon"><use href="#i-sparkle"/></svg>MiniMax 花卉创作</span><button type="button" class="text-button" id="capture-ai-settings"><svg class="icon"><use href="#i-sparkle"/></svg><span>配置 MiniMax</span></button></div>
-    <p class="creation-service" id="creation-service">先识别鲜花，再生成去背景的花卉图片。</p><p class="subject-status" id="subject-status" role="status" aria-live="polite" data-state="unverified">请先配置 MiniMax API Key，确认照片主体为鲜花。</p>
+    <div class="creation-mode"><span class="creation-label"><svg class="icon"><use href="#i-sparkle"/></svg>MiniMax 花卉创作</span><button type="button" class="text-button" id="capture-ai-settings"><svg class="icon"><use href="#i-sparkle"/></svg><span>输入花园口令</span></button></div>
+    <p class="creation-service" id="creation-service">先识别鲜花，再生成去背景的花卉图片。</p><p class="subject-status" id="subject-status" role="status" aria-live="polite" data-state="unverified">请先输入花园口令 API Key，确认照片主体为鲜花。</p>
     <label>给这份心动取个名字<input id="flower-name" name="name" maxlength="24" value="今日的小心动" required autocomplete="off"></label>
     <label>留一句花语 <span class="optional">选填</span><input id="flower-note" name="note" maxlength="80" placeholder="比如：看到这朵花的时候，刚好在想你。" autocomplete="off"></label>
     <div class="generate-actions"><div class="generation-secondary"><button type="button" class="text-button" id="retake-photo">重新选择</button><button type="button" class="text-button" id="cancel-generation" hidden>取消生成</button></div><button type="submit" class="button button-dark" id="generate-button"><svg class="icon"><use href="#i-sparkle"/></svg><span>识别鲜花并生成</span><svg class="icon"><use href="#i-arrow"/></svg></button></div>
@@ -117,21 +117,16 @@
 
   <dialog class="ai-dialog" id="ai-dialog" aria-labelledby="ai-dialog-title">
     <div class="dialog-top"><span class="eyebrow">AI / CREATIVE STUDIO</span><button type="button" class="icon-button" id="close-ai-settings" aria-label="关闭 AI 创作设置"><svg class="icon"><use href="#i-close"/></svg></button></div>
-    <div class="ai-heading"><span class="ai-heading-icon"><svg class="icon"><use href="#i-sparkle"/></svg></span><div><h2 id="ai-dialog-title">给花开，一点想象。</h2><p>连接 MiniMax，留下花的本来模样；一朵，或一整束。</p></div></div>
+    <div class="ai-heading"><span class="ai-heading-icon"><svg class="icon"><use href="#i-sparkle"/></svg></span><div><h2 id="ai-dialog-title">给花开，一点想象。</h2><p>一朵，或一整束，留下花的本来模样。</p></div></div>
     <form id="ai-settings-form" autocomplete="off">
-      <label for="ai-provider">模型服务商 <span>当前仅支持 MiniMax</span></label><input id="ai-provider" value="MiniMax" readonly>
-      <label for="ai-base-url">服务地址 <span>MiniMax 官方接口</span></label><input id="ai-base-url" type="url" value="https://api.minimax.cn/v1" readonly>
-      <label for="ai-api-key">MiniMax API Key <span>仅当前页面会话使用</span></label>
-      <div class="api-key-field"><input id="ai-api-key" name="api-key" type="password" required maxlength="4096" placeholder="输入你的 MiniMax API Key" spellcheck="false" autocapitalize="none" autocomplete="off"><button type="button" id="toggle-api-key" aria-label="显示 API Key" aria-pressed="false">显示</button></div>
-      <label for="ai-model">花卉识别模型 <span>先判断主体是不是花</span></label><input id="ai-model" value="minimax-m3.1-flash" readonly>
-      <label for="ai-image-model">生图模型 <span>识别通过后生成</span></label><select id="ai-image-model" name="image-model"><option value="image-01">image-01 · 写实花卉</option><option value="image-01-live">image-01-live</option></select>
-      <p class="ai-model-hint">只保留花卉和自然茎叶，去除背景；多朵花聚合为一束。</p>
-      <div class="ai-verification" id="ai-verification" data-state="idle"><span class="verification-icon"><svg class="icon"><use href="#i-sparkle"/></svg></span><div><strong id="ai-verify-title">连接 MiniMax，先认花再生图</strong><p id="ai-verify-description">填写 API Key 后验证图片理解；生图权限会在实际生成时检查。</p></div></div>
+      <label for="garden-passcode">花园口令 <span>向花园主人领取</span></label>
+      <div class="api-key-field"><input id="garden-passcode" name="passcode" type="password" required maxlength="256" placeholder="输入口令，开始花卉创作" spellcheck="false" autocapitalize="none" autocomplete="off"><button type="button" id="toggle-passcode" aria-label="显示口令" aria-pressed="false">显示</button></div>
+      <div class="ai-verification" id="ai-verification" data-state="idle"><span class="verification-icon"><svg class="icon"><use href="#i-sparkle"/></svg></span><div><strong id="ai-verify-title">正在连接小花园…</strong><p id="ai-verify-description">解锁后先识别鲜花，再生成去背景的花卉图片。</p></div></div>
       <p id="ai-settings-status" class="ai-settings-status" role="status" aria-live="polite"></p>
-      <div class="ai-settings-actions"><button type="button" class="button button-outline" id="verify-ai-model"><svg class="icon"><use href="#i-image"/></svg><span>验证 MiniMax</span></button><button type="submit" class="button button-dark" id="save-ai-settings" disabled>保存并使用<svg class="icon"><use href="#i-check"/></svg></button></div>
-      <div class="ai-settings-bottom"><button type="button" class="text-button" id="clear-ai-settings">清除配置</button><span id="ai-active-model">尚未连接 MiniMax</span></div>
+      <div class="ai-settings-actions"><button type="submit" class="button button-dark" id="save-ai-settings">解锁花卉创作<svg class="icon"><use href="#i-check"/></svg></button></div>
+      <div class="ai-settings-bottom"><button type="button" class="text-button" id="clear-ai-settings" hidden>退出创作</button><span id="ai-active-model">正在连接…</span></div>
     </form>
-    <div class="ai-data-note"><svg class="icon"><use href="#i-image"/></svg><p>验证会向 MiniMax 发送一张测试图片；生成时会发送所选照片进行花卉识别与生图，可能产生调用费用。API Key 只留在当前页面内存，刷新后需重新填写。照片与生成藏品仅保存在本机；接口需要支持浏览器跨域请求。</p></div>
+    <div class="ai-data-note"><svg class="icon"><use href="#i-image"/></svg><p>识别与生成时，所选照片会经花园服务发送给 MiniMax。每次开始生图都会使用一次全站额度，失败也可能计费；没有花或无法确定时不会生图。照片与藏品保存在这台设备的浏览器中，不跨设备同步。</p></div>
   </dialog>
 
   <dialog class="detail-dialog" id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="eyebrow">A FLOWER, A FEELING</span><button class="icon-button" id="close-detail" aria-label="关闭花朵详情"><svg class="icon"><use href="#i-close"/></svg></button></div><div class="detail-scene" id="detail-scene"></div><div class="detail-controls"><button class="icon-button" id="rotate-flower" aria-label="旋转花朵"><svg class="icon"><use href="#i-rotate"/></svg></button><span>轻触绽放 · 拖动轻转 · 双指缩放</span><button class="icon-button" id="bloom-detail" aria-label="让花朵绽放"><svg class="icon"><use href="#i-flower"/></svg></button></div><div class="detail-copy"><span id="detail-type" class="eyebrow"></span><h2 id="detail-title"></h2><p id="detail-note"></p><div class="detail-meta"><span id="detail-date"></span><span id="detail-format">花卉藏品</span></div><p class="asset-origin" id="asset-origin" hidden></p><button class="text-button" id="regenerate-flower" hidden><svg class="icon"><use href="#i-sparkle"/></svg>用原照重新生成花卉</button><details class="svg-inspector" id="svg-inspector" hidden><summary>查看这朵花的 SVG 细节</summary><p id="svg-description"></p><p id="svg-stats"></p><p id="svg-fingerprint"></p><pre id="svg-code" tabindex="0" aria-label="花卉 SVG 源码"></pre></details><div class="detail-actions"><button class="button button-dark" id="favorite-detail"><svg class="icon"><use href="#i-heart"/></svg><span>记下一份心动</span></button><button class="button button-outline" id="export-flower"><svg class="icon"><use href="#i-download"/></svg>保存花笺</button><button class="button button-outline" id="export-svg"><svg class="icon"><use href="#i-flower"/></svg>导出 SVG</button><button class="button button-outline" id="export-image" hidden><svg class="icon"><use href="#i-download"/></svg>导出透明 PNG</button><button class="text-button remove-flower" id="remove-flower">移出藏品</button></div><details class="original-photo" id="original-photo"><summary>看看相遇时的样子</summary><img id="original-photo-image" alt="这朵藏花的原始照片"></details></div></dialog>

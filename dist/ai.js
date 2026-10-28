@@ -175,6 +175,14 @@ export async function verifyVision(input, options = {}) {
 
 export function isVerified(config) { return !!config && verifiedConfigurations.has(config); }
 
+// Server credentials come from Worker Secrets. Remote callers never choose this
+// configuration; the server still classifies every photo before generation.
+export function createServerConfiguration(input) {
+  const config=Object.freeze(normalizeConfiguration(input));
+  verifiedConfigurations.add(config);
+  return config;
+}
+
 function text(value, max, fallback = '') { return typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, max) : fallback; }
 
 const subjectTypes=['flower','person','animal','object','landscape','document','mixed','unclear','other'];
@@ -257,6 +265,8 @@ export async function generateFlowerAsset(config,image,options={}){
   if(options.signal?.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
   const matte=chooseMatteColor(approval.color);
   try{
+    await options.beforeGenerate?.();
+    if(options.signal?.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
     // The documented reference type is "character"; MiniMax exposes no flower type.
     const result=await requestJSON(config,'/image_generation',{...options,timeout:options.timeout||180000,body:{model:config.imageModel,prompt:buildImagePrompt(approval,matte),subject_reference:[{type:'character',image_file:image}],aspect_ratio:'3:4',response_format:'base64',n:1,prompt_optimizer:false}});
     const generated=await generatedImage(result,options);

@@ -1,10 +1,10 @@
-import { FlowerScene, getThumbnail, getFlowerSVG, exportFlowerSVG } from './flower.js?v=minimax-1';
-import { generateFlowerAsset, assessFlowerSubject, isApprovedSubject, AIError } from './ai.js?v=minimax-1';
-import { createAISettings } from './ai-settings.js?v=minimax-1';
+import { FlowerScene, getThumbnail, getFlowerSVG, exportFlowerSVG } from './flower.js?v=cloudflare-2';
+import { generateManagedFlower, AIError } from './managed-ai.js?v=cloudflare-2';
+import { createAISettings } from './ai-settings.js?v=cloudflare-2';
 
-import {inspectSVG} from './svg.js?v=minimax-1';
-import {prepareFlowerImage,isFlowerImage} from './flower-image.js?v=minimax-1';
-import {singleFlight, scatterPetals} from './effects.js?v=minimax-1';
+import {inspectSVG} from './svg.js?v=cloudflare-2';
+import {prepareFlowerImage,isFlowerImage} from './flower-image.js?v=cloudflare-2';
+import {singleFlight, scatterPetals} from './effects.js?v=cloudflare-2';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -19,30 +19,27 @@ const gifts = [
 let flowers = [], database, storageAvailable = true, activeFilter = 'all';
 let heroWorld, detailWorld, selectedId, photoSource = null, photoIsDemo = false, cameraStream = null;
 let toastTimer, undoAction, processing = false, systemCameraFallback = false;
-let generationController = null, subjectReceipt = null, subjectState = 'unverified';
+let generationController = null, subjectState = 'unverified';
 const captureDialog = $('#capture-dialog'), detailDialog = $('#detail-dialog'), loveDialog = $('#love-dialog');
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
 const aiSettings = createAISettings({notify, onOpen: lockScroll, onClose: unlockScroll, onChange: config => {
   $('#ai-ready-dot').hidden = !config;
-  subjectReceipt=null;subjectState='unverified';syncCreationMode();
+  subjectState='unverified';syncCreationMode();
 }});
 
 function subjectStatus(state,message){
   subjectState=state;$('#subject-status').dataset.state=state;$('#subject-status').textContent=message;
 }
 function syncCreationMode(){
-  const config=aiSettings.getConfig(),ready=aiSettings.isReady();
-  $('#capture-ai-settings span').textContent=ready?'MiniMax 已就绪 · 设置':'配置 MiniMax';
-  $('#creation-service').textContent=ready?`先识别照片主体，再生成去背景的花卉图片；多朵花聚成一束。`:'请先连接 MiniMax，识别花卉主体后再生成。';
+  const ready=aiSettings.isReady();
+  $('#capture-ai-settings span').textContent=ready?'创作已解锁 · 设置':'输入花园口令';
+  $('#creation-service').textContent=ready?'先识别照片主体，再生成去背景的花卉图片；多朵花聚成一束。':'输入花园口令，留下喜欢的花。';
   $('#creation-service').classList.toggle('attention',!ready);
   if(!processing){
-    if(!ready)subjectStatus('unverified','请先配置 MiniMax API Key；未确认主体是鲜花前，不会开始生图。');
-    else if(subjectState!=='rejected'){
-      const approved=isApprovedSubject(subjectReceipt,config,photoSource);
-      subjectStatus(approved?'approved':'unverified',approved?'已确认主体为鲜花，可以继续生成。':'生成前先识别照片主体；没有花、主体不是花或无法确定时会停止。');
-    }
-    $('#generate-button').disabled=subjectState==='rejected'||!ready;
-    $('#generate-button span').textContent='识别鲜花并生成';
+    if(!ready)subjectStatus('unverified','请先输入花园口令；未确认主体是鲜花前，不会开始生图。');
+    else if(subjectState!=='rejected')subjectStatus('unverified','生成前先识别照片主体；没有花、主体不是花或无法确定时会停止。');
+    $('#generate-button').disabled=subjectState==='rejected';
+    $('#generate-button span').textContent=ready?'识别鲜花并生成':'输入口令开始创作';
   }
 }
 
@@ -204,7 +201,7 @@ $$('.close-capture').forEach(button=>button.addEventListener('click',()=>capture
 function captureStatus(message,error=false){$('#capture-status').textContent=message;$('#capture-status').classList.toggle('error',error)}
 function stopCamera(){if(cameraStream){cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null}$('#camera-video').srcObject=null;$('#camera-video').hidden=true;$('#shutter-button').hidden=true}
 function resetCapture(){
-  stopCamera();photoSource=null;photoIsDemo=false;subjectReceipt=null;subjectState='unverified';$('#capture-form').hidden=true;$('#photo-source-actions').hidden=false;$('#capture-empty').hidden=false;$('#photo-preview').hidden=true;$('#photo-preview').removeAttribute('src');$('#flower-name').value='今日的小心动';$('#flower-note').value='';captureStatus('');$('#generate-button').disabled=false;$('#generate-button span').textContent='识别鲜花并生成';$('#photo-input').value='';$('#camera-input').value='';
+  stopCamera();photoSource=null;photoIsDemo=false;subjectState='unverified';$('#capture-form').hidden=true;$('#photo-source-actions').hidden=false;$('#capture-empty').hidden=false;$('#photo-preview').hidden=true;$('#photo-preview').removeAttribute('src');$('#flower-name').value='今日的小心动';$('#flower-note').value='';captureStatus('');$('#generate-button').disabled=false;$('#generate-button span').textContent='识别鲜花并生成';$('#photo-input').value='';$('#camera-input').value='';
   captureBusy(false);syncCreationMode();
 }
 captureDialog.addEventListener('close',()=>{stopCamera();generationController?.abort();unlockScroll()});
@@ -222,8 +219,8 @@ $('#choose-photo').addEventListener('click',()=>$('#photo-input').click());
 $('#retake-photo').addEventListener('click',resetCapture);
 function fittedCanvas(image,max=900){const scale=Math.min(1,max/Math.max(image.width||image.videoWidth,image.height||image.videoHeight));const canvas=document.createElement('canvas');canvas.width=Math.round((image.width||image.videoWidth)*scale);canvas.height=Math.round((image.height||image.videoHeight)*scale);canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);return canvas}
 function setPhoto(source,demo=false){
-  stopCamera();photoSource=source;photoIsDemo=demo;subjectReceipt=null;subjectState='unverified';$('#photo-preview').src=source;$('#photo-preview').hidden=false;$('#capture-empty').hidden=true;$('#photo-source-actions').hidden=true;$('#capture-form').hidden=false;
-  $('#flower-name').value=demo?'晨光里的温柔（示例）':'今日的小心动';captureStatus(demo?'示例已就绪，连接 MiniMax 后可体验识别与生图。':'已留住这一刻。给这朵花一个名字吧。');
+  stopCamera();photoSource=source;photoIsDemo=demo;subjectState='unverified';$('#photo-preview').src=source;$('#photo-preview').hidden=false;$('#capture-empty').hidden=true;$('#photo-source-actions').hidden=true;$('#capture-form').hidden=false;
+  $('#flower-name').value=demo?'晨光里的温柔（示例）':'今日的小心动';captureStatus(demo?'示例已就绪，解锁花卉创作后可体验识别与生图。':'已留住这一刻。给这朵花一个名字吧。');
   syncCreationMode();
 }
 $('#shutter-button').addEventListener('click',()=>{const video=$('#camera-video');if(!video.videoWidth)return;const canvas=fittedCanvas(video);setPhoto(canvas.toDataURL('image/jpeg',.84))});
@@ -245,18 +242,14 @@ $('#capture-form').addEventListener('submit',async event=>{
   event.preventDefault();if(!photoSource||processing)return;
   const name=$('#flower-name').value.trim();if(!name){$('#flower-name').focus();captureStatus('为这份心动取个名字吧。',true);return;}
   if(!storageAvailable||!database){captureStatus('浏览器储存暂时不可用，请在普通浏览模式下重试；本次没有调用模型。',true);return;}
-  const config=aiSettings.getConfig();
-  if(!aiSettings.isReady()){captureStatus('请先配置 MiniMax API Key，确认照片主体是鲜花后才能生成。',true);aiSettings.open();return;}
+  if(!aiSettings.isReady()){captureStatus('请先输入花园口令，再开始花卉创作。',true);aiSettings.open();return;}
   const source=photoSource,note=$('#flower-note').value.trim(),demo=photoIsDemo;
   generationController=new AbortController();const controller=generationController;
   processing=true;captureBusy(true);$('#generate-button span').textContent='正在让它盛开…';
   try{
-    subjectStatus('checking','正在判断照片主体是否为真实花卉…');captureStatus('01 / 正在识别花卉主体…');await frame();
-    if(!isApprovedSubject(subjectReceipt,config,source))subjectReceipt=await assessFlowerSubject(config,source,{signal:controller.signal});
-    if(controller.signal.aborted)throw new AIError('已取消生成，照片仍为你保留。','aborted');
-    subjectStatus('approved',subjectReceipt.multipleFlowers?'已确认主体为鲜花，将多朵花自然聚成一束。':'已确认主体为鲜花，开始生成。');
-    captureStatus('02 / MiniMax 正在生成花卉图片…');await frame();
-    const {suggestedName,suggestedNote,generatedImage,matteColor,...asset}=await generateFlowerAsset(config,source,{signal:controller.signal,approval:subjectReceipt});
+    subjectStatus('checking','正在识别鲜花并创作，请稍候…');captureStatus('01–02 / 正在识别鲜花并生成图片…');await frame();
+    const {suggestedName,suggestedNote,generatedImage,matteColor,...asset}=await generateManagedFlower(source,{signal:controller.signal});
+    subjectStatus('approved',asset.subjectAssessment.multipleFlowers?'已确认主体为鲜花，多朵花已聚成一束。':'已确认主体为鲜花，图片已生成。');
     captureStatus('03 / 正在移除背景，并让花卉居中…');await frame();
     const cutout=await prepareFlowerImage(generatedImage,matteColor,{signal:controller.signal});
     const record={...asset,...cutout,id:crypto.randomUUID?.()||`flower-${Date.now()}-${Math.random().toString(36).slice(2)}`,name:name==='今日的小心动'?suggestedName:name,note:note||suggestedNote||'',createdAt:Date.now(),favorite:false,gift:false,demo,photo:source};
@@ -264,8 +257,9 @@ $('#capture-form').addEventListener('submit',async event=>{
     $('#cancel-generation').hidden=true;captureStatus('04 / 正在把心动放进藏花阁…');await saveRecord(record);flowers.push(record);setFilter('all');
     const showResult=captureDialog.open;captureDialog.close();if(showResult)openDetail(record.id);petals(innerWidth*.5,innerHeight*.36);notify('这份心动，已珍藏在这台设备的小花园。');
   }catch(error){
+    if(error.code==='session_required'){aiSettings.invalidate();aiSettings.open();}
     if(['not_flower','uncertain_subject'].includes(error.code))subjectStatus('rejected',error.message);
-    else if(subjectState==='checking')subjectStatus('error','主体识别未完成，本次没有开始生图。可重试或更换照片。');
+    else if(subjectState==='checking')subjectStatus('error',error.stage==='image_generation'?'鲜花已识别，生图未完成；已经发起的模型调用仍可能计费。':'本次创作未完成，原照仍然保留。请查看下方提示。');
     captureStatus(error.name==='AbortError'?'已取消生成，照片仍为你保留。':error.name==='QuotaExceededError'?'设备储存空间不足，这朵花还没有保存，请释放一些空间后重试。':error.message||'花朵还没有保存成功，请再试一次。',error.code!=='aborted');
   }finally{if(generationController===controller)generationController=null;processing=false;captureBusy(false);syncCreationMode();}
 });

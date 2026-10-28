@@ -1,4 +1,4 @@
-import {sanitizeSVG,SVGError} from './svg.js?v=minimax-1';
+import {sanitizeSVG,SVGError} from './svg.js?v=cloudflare-2';
 
 // Validate the final asset using the same browser SVG decoder used for thumbnails/PNG export.
 export async function validateSVGRendering(input,{signal,timeout=8000}={}){

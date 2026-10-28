@@ -1,7 +1,7 @@
-import {FLOWER_ART} from './flower-assets.js?v=minimax-1';
-import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=minimax-1';
-import {legacyGeometrySVG} from './legacy-svg.js?v=minimax-1';
-import {isFlowerImage} from './flower-image.js?v=minimax-1';
+import {FLOWER_ART} from './flower-assets.js?v=cloudflare-2';
+import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=cloudflare-2';
+import {legacyGeometrySVG} from './legacy-svg.js?v=cloudflare-2';
+import {isFlowerImage} from './flower-image.js?v=cloudflare-2';
 
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 let serial=0;

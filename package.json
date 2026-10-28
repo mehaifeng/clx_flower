@@ -4,7 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node scripts/check.mjs && node scripts/check-ai.mjs",
-    "dev": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist"
+    "check": "node scripts/check.mjs && node scripts/check-ai.mjs && node --test tests/*.test.mjs",
+    "dev": "wrangler dev --ip 127.0.0.1 --port 4173",
+    "deploy:preview": "wrangler deploy --env ''",
+    "deploy:production": "wrangler deploy --env production",
+    "setup:secrets": "node scripts/setup-secrets.mjs",
+    "check:live": "node scripts/live-check.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "5.20261023.1-beta",
+    "sharp": "0.35.5",
+    "wrangler": "^4.154.0"
   }
 }
