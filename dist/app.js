@@ -76,7 +76,7 @@ function petals(x=innerWidth*.6,y=innerHeight*.4,rain=false,scene=null,message='
 }
 function bloomForHer(){
   const rect=$('#hero-scene').getBoundingClientRect();
-  petals(Math.min(innerWidth-30,rect.left+rect.width*.5),Math.max(100,rect.top+rect.height*.35),false,heroWorld,'琳萱，今天也想把花送给你。');
+  petals(Math.min(innerWidth-30,rect.left+rect.width*.5),Math.max(100,rect.top+rect.height*.35),false,heroWorld,'陈琳萱，今天也想把花送给你。');
 }
 $('#bloom-button').addEventListener('click',bloomForHer);
 $('#hero-scene').addEventListener('flower-tap',e=>petals(e.detail.x,e.detail.y,false,heroWorld,'你一靠近，花就开了。'));
