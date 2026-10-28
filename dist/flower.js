@@ -1,6 +1,7 @@
-import {FLOWER_ART} from './flower-assets.js?v=svg-3';
-import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=svg-3';
-import {legacyGeometrySVG} from './legacy-svg.js?v=svg-3';
+import {FLOWER_ART} from './flower-assets.js?v=minimax-1';
+import {sanitizeSVG, svgDataURL, scopeSVG} from './svg.js?v=minimax-1';
+import {legacyGeometrySVG} from './legacy-svg.js?v=minimax-1';
+import {isFlowerImage} from './flower-image.js?v=minimax-1';
 
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 let serial=0;
@@ -9,6 +10,7 @@ function blend(hex,target,amount){
   return '#'+rgb(hex).map((n,i)=>Math.round(n*(1-amount)+rgb(target)[i]*amount).toString(16).padStart(2,'0')).join('');
 }
 export function getFlowerSVG(config={}){
+  if(config.type==='image')throw new Error('这是一幅 MiniMax 图片藏品，可导出透明 PNG。');
   if(config.svg)return sanitizeSVG(config.svg);
   if(config.geometry)return legacyGeometrySVG(config.geometry);
   if(['generated','svg'].includes(config.type))throw new Error('这朵花缺少 SVG 代码，请用原照重新绘制。');
@@ -22,7 +24,7 @@ export function getFlowerSVG(config={}){
   }
   return sanitizeSVG(art);
 }
-export function getThumbnail(config){return svgDataURL(getFlowerSVG(config));}
+export function getThumbnail(config){if(config.type==='image'){if(!isFlowerImage(config))throw new Error('花卉图片不可用，原照仍保留。');return config.image;}return svgDataURL(getFlowerSVG(config));}
 export function exportFlowerSVG(config){return getFlowerSVG(config);}
 
 export class FlowerScene {
@@ -30,7 +32,9 @@ export class FlowerScene {
     this.container=container;this.options=options;this.disposed=false;this.suspended=false;this.zoom=1;this.rotation=0;this.pointers=new Map();this.animations=[];this.blooming=false;
     this.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.art=document.createElement('div');this.art.className='flower-art';
-    this.source=getFlowerSVG(config);this.art.innerHTML=scopeSVG(this.source,`flower${++serial}`);
+    this.isImage=config.type==='image';
+    if(this.isImage){this.source=getThumbnail(config);const img=new Image();img.src=this.source;img.alt=config.name||'花卉本体';this.art.append(img);}
+    else{this.source=getFlowerSVG(config);this.art.innerHTML=scopeSVG(this.source,`flower${++serial}`);}
     this.svg=this.art.firstElementChild;this.svg.classList.add('flower-artwork');this.svg.setAttribute('role','img');this.svg.setAttribute('aria-label',`${config.name||'精细花卉'}，轻触绽放`);
     this.art.tabIndex=0;this.art.setAttribute('role','button');this.art.setAttribute('aria-label',`轻触${config.name||'花朵'}，让它绽放`);this.art.setAttribute('aria-disabled','false');
     container.append(this.art);container.classList.add('scene-ready');
@@ -82,22 +86,6 @@ export class FlowerScene {
     }finally{this.animations.forEach(a=>a.cancel());this.animations=[];this.blooming=false;if(!this.disposed)this.syncMotion();}
   }
   rotate(){this.rotation=this.rotation>=14?-14:this.rotation+7;this.updateTransform();}
-  snapshot(){return svgDataURL(this.source);}
+  snapshot(){return this.isImage?this.source:svgDataURL(this.source);}
   dispose(){this.disposed=true;this.sway?.cancel();this.animations.forEach(a=>a.cancel());this.observer.disconnect();document.removeEventListener('visibilitychange',this.visibility);this.art.removeEventListener('pointerdown',this.onDown);this.art.removeEventListener('pointermove',this.onMove);this.art.removeEventListener('pointerup',this.onUp);this.art.removeEventListener('pointercancel',this.onUp);this.art.removeEventListener('keydown',this.onKey);this.art.remove();}
-}
-export async function analysePhoto(source){
-  const image=new Image();image.src=source;await image.decode();
-  const canvas=document.createElement('canvas');canvas.width=80;canvas.height=80;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,80,80);
-  const pixels=ctx.getImageData(0,0,80,80).data,bins=new Map();
-  for(let i=0;i<pixels.length;i+=4){
-    const [r,g,b]=[pixels[i],pixels[i+1],pixels[i+2]],max=Math.max(r,g,b),min=Math.min(r,g,b);
-    if(max<65||max-min<25||g>r*1.13&&g>b*1.1)continue;
-    const key=[r>>5,g>>5,b>>5].join(','),entry=bins.get(key)||{r:0,g:0,b:0,n:0,score:0};
-    entry.r+=r;entry.g+=g;entry.b+=b;entry.n++;entry.score+=(max-min)/max;bins.set(key,entry);
-  }
-  const sorted=[...bins.values()].sort((a,b)=>b.score-a.score);
-  let hex='#e4a5b6';
-  if(sorted.length){const p=sorted[0];hex='#'+[p.r,p.g,p.b].map(v=>Math.round(v/p.n).toString(16).padStart(2,'0')).join('')}
-  return {color:hex,seed:Array.from(source.slice(-200)).reduce((acc,char)=>(acc*31+char.charCodeAt(0))%2147483646,7)+1};
 }

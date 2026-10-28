@@ -25,9 +25,9 @@ for(const file of readdirSync(dist).filter(n=>n.endsWith('.js'))){
  for(const [,ref] of source.matchAll(/from ['"]([^'"]+)['"]/g))assert(existsSync(resolve(dist,ref.split(/[?#]/)[0])),`Missing module ${ref}`);
  assert(!/THREE|WebGLRenderer|GLTFExporter/.test(source),'No 3D runtime remains');
 }
-assert(!/3D|GLB|几何结构|空间结构/.test(html+app),'User-facing creation and exports use SVG');
+assert(!/3D|GLB|几何结构|空间结构/.test(html+app),'No removed 3D controls remain in user-facing creation or exports');
 assert(html.includes('width=device-width, initial-scale=1, viewport-fit=cover'));assert(css.includes('prefers-reduced-motion'));assert(!html.includes('情书'));
-console.log('PASS · HTML, asset references, interactions, accessibility, syntax and SVG-only runtime');
+console.log('PASS · HTML, asset references, interactions, accessibility, syntax and SVG/PNG collection runtime');
 for(const type of ['peony','tulip','daisy']){
  const svg=getFlowerSVG({type}),stats=inspectSVG(svg);
  assert(stats.paths>80&&stats.gradients>=8);assert.equal(exportFlowerSVG({type}),svg);

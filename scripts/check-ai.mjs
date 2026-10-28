@@ -1,113 +1,127 @@
 import assert from 'node:assert/strict';
-import {normalizeBaseURL,normalizeConfiguration,verifyVision,isVerified,readModelCatalog,generateFlowerAsset,sanitizeFlowerRecipe,parseModelJSON,FLOWER_SYSTEM_PROMPT,assessFlowerSubject,isApprovedSubject,sanitizeSubjectAssessment,SUBJECT_SYSTEM_PROMPT,SUBJECT_RESPONSE_FORMAT,FLOWER_RESPONSE_FORMAT} from '../dist/ai.js';
-import {sanitizeSVG,inspectSVG} from '../dist/svg.js';
-import {lilySVG,spiderSVG} from './svg-fixtures.mjs';
-const config={baseUrl:'https://vision.example.test/v1/',apiKey:'unit-test-not-a-real-key',model:'test-vision'},image='data:image/png;base64,iVBORw0KGgo=';
+import {normalizeBaseURL,normalizeConfiguration,verifyVision,isVerified,generateFlowerAsset,parseModelJSON,assessFlowerSubject,isApprovedSubject,sanitizeSubjectAssessment,SUBJECT_SYSTEM_PROMPT,SUBJECT_RESPONSE_FORMAT,MINIMAX_BASE_URL,VISION_MODEL,chooseMatteColor,buildImagePrompt,imageDataURL} from '../dist/ai.js';
+import {removeMattePixels,centeredFlowerRect,isFlowerImage} from '../dist/flower-image.js';
+import {getThumbnail,getFlowerSVG} from '../dist/flower.js';
+import {sanitizeSVG} from '../dist/svg.js';
+const config={provider:'minimax',baseUrl:MINIMAX_BASE_URL,apiKey:'unit-test-not-a-real-key',model:VISION_MODEL,imageModel:'image-01'};
+const image='data:image/png;base64,iVBORw0KGgo=',jpeg='/9j/AA==';
 const expected=[{color:'red',shape:'circle'},{color:'blue',shape:'star'},{color:'green',shape:'triangle'},{color:'purple',shape:'square'}],challenge={image,expected};
-const response=value=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(value)}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-assert.equal(normalizeBaseURL('https://vision.example.test'),'https://vision.example.test/v1');
-assert.equal(normalizeBaseURL('https://vision.example.test/api/v1/chat/completions/'),'https://vision.example.test/api/v1');
-assert.equal(normalizeBaseURL('http://127.0.0.1:8080/v1'),'http://127.0.0.1:8080/v1');
-for(const bad of ['http://vision.example.test/v1','https://user:secret@example.test/v1','https://example.test/v1?api_key=x','javascript:alert(1)','https://example.test/v1#key'])assert.throws(()=>normalizeBaseURL(bad));
-assert.throws(()=>normalizeConfiguration({...config,apiKey:'test\nkey'}));assert.throws(()=>normalizeConfiguration({...config,model:''}));
-assert.equal(parseModelJSON('```json\n{"ok":true}\n```').ok,true);assert.throws(()=>parseModelJSON('unstructured output'));
-const approved={schemaVersion:1,mainSubject:'flower',flowerPresent:true,flowerIsPrimary:true,confidence:.97,reason:'鲜花居于画面中央，花瓣与花蕊清晰可见。'};
-const generationResponse=value=>async(url,options)=>response(JSON.parse(options.body).messages[0]?.content===SUBJECT_SYSTEM_PROMPT?approved:value);
+const approved={schemaVersion:1,mainSubject:'flower',flowerPresent:true,flowerIsPrimary:true,confidence:.97,reason:'鲜花为画面主体，花瓣与花蕊清晰。',species:'粉色芍药',description:'一朵淡粉芍药，层叠花瓣、黄色花蕊，连着绿色茎叶。',multipleFlowers:false,color:'#f1c2c4',name:'粉云叠瓣',note:'把这一朵温柔送给你。'};
+const response=value=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(value)}}]}),{status:200});
+const generated=(value={data:{image_base64:[jpeg]},base_resp:{status_code:0}})=>new Response(JSON.stringify(value));
+assert.equal(normalizeBaseURL(),MINIMAX_BASE_URL);
+for(const url of ['https://api.minimax.cn','https://api.minimax.cn/v1/','https://api.minimax.cn/v1/chat/completions/','https://api.minimax.cn/v1/image_generation'])assert.equal(normalizeBaseURL(url),MINIMAX_BASE_URL);
+for(const url of ['http://api.minimax.cn/v1','https://api.minimax.cn.example.test/v1','https://api.openai.com/v1','https://api.minimax.cn/v2','https://user:secret@api.minimax.cn/v1','https://api.minimax.cn/v1?key=x','https://api.minimax.cn/v1#key','http://127.0.0.1:8080/v1','javascript:alert(1)'])assert.throws(()=>normalizeBaseURL(url));
+for(const change of [{apiKey:''},{apiKey:'test\nkey'},{provider:'other'},{model:'other-vision'},{imageModel:'other-image'}])assert.throws(()=>normalizeConfiguration({...config,...change}));
+assert.equal(normalizeConfiguration({apiKey:config.apiKey}).model,VISION_MODEL);
+assert.equal(parseModelJSON('```json\n{"ok":true}\n```').ok,true);
+for(const value of ['unstructured output','[]','null','Before {"ok":true}'])assert.throws(()=>parseModelJSON(value));
 let requests=[];
 const visualAPI=async(url,options)=>{
- const body=JSON.parse(options.body);requests.push(body);assert.equal(url,'https://vision.example.test/v1/chat/completions');assert.equal(options.headers.Authorization,`Bearer ${config.apiKey}`);assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
- const user=body.messages.find(m=>m.role==='user');assert.equal(user.content[1].type,'image_url');assert.equal(user.content[1].image_url.url,image);
- return response(user.content[0].text.includes('LEFT to RIGHT')?{items:expected}:body.messages[0]?.content===SUBJECT_SYSTEM_PROMPT?approved:lilySVG);
+ const body=JSON.parse(options.body);requests.push({url,body});
+ assert.equal(options.headers.Authorization,`Bearer ${config.apiKey}`);assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
+ if(url.endsWith('/image_generation')){
+  assert.equal(body.model,'image-01');assert.equal(body.n,1);assert.equal(body.response_format,'base64');assert.equal(body.prompt_optimizer,false);assert.equal(body.aspect_ratio,'3:4');
+  assert.deepEqual(body.subject_reference,[{type:'character',image_file:image}]);assert(!body.messages);assert(!body.prompt.includes('SVG'));assert(body.prompt.length<=1500);return generated();
+ }
+ assert.equal(url,MINIMAX_BASE_URL+'/chat/completions');assert.equal(body.model,VISION_MODEL);assert.equal(body.reasoning_effort,'medium');
+ const user=body.messages.find(m=>m.role==='user');assert.equal(user.content[1].image_url.url,image);
+ return response(user.content[0].text.includes('LEFT to RIGHT')?{items:expected}:approved);
 };
 const verified=await verifyVision(config,{challenge,fetcher:visualAPI});assert(isVerified(verified));assert(Object.isFrozen(verified));assert(!isVerified({...verified}));
-const asset=await generateFlowerAsset(verified,image,{fetcher:visualAPI});assert.equal(asset.type,'svg');assert.equal(asset.ai.method,'vision-svg-v1');assert.equal(asset.svgHash.length,64);assert.equal(asset.species,'百合');assert(asset.svgStats.paths>=8);assert(!('geometry' in asset));
-assert.equal(requests[2].messages[0].role,'system');assert.equal(requests[2].messages[0].content,FLOWER_SYSTEM_PROMPT);assert(FLOWER_SYSTEM_PROMPT.includes('HIGHLY DETAILED'));assert(FLOWER_SYSTEM_PROMPT.includes('COMPLETE detailed SVG code'));assert.equal(requests[2].max_completion_tokens,16000);
-assert.deepEqual(requests[1].response_format,SUBJECT_RESPONSE_FORMAT);assert.deepEqual(requests[2].response_format,FLOWER_RESPONSE_FORMAT);assert.equal(requests[1].max_completion_tokens,1600);assert.equal(asset.subjectAssessment.mainSubject,'flower');
+const asset=await generateFlowerAsset(verified,image,{fetcher:visualAPI});
+assert.equal(asset.type,'image');assert.equal(asset.ai.method,'minimax-image-v1');assert.equal(asset.ai.model,'image-01');assert.equal(asset.ai.visionModel,VISION_MODEL);assert(!('svg' in asset));assert(!('geometry' in asset));
+assert.equal(requests.length,3);assert.deepEqual(requests[1].body.response_format,SUBJECT_RESPONSE_FORMAT);assert.equal(requests[1].body.messages[0].content,SUBJECT_SYSTEM_PROMPT);assert(requests[2].url.endsWith('/image_generation'));
 assert(!JSON.stringify(asset).includes(config.apiKey));assert(!JSON.stringify(asset).includes(config.baseUrl));
-let called=false;await assert.rejects(generateFlowerAsset({...verified},image,{fetcher:()=>called=true}),e=>e.code==='unverified');assert(!called);
-await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>response({items:[]})}),e=>e.code==='no_vision');await assert.rejects(generateFlowerAsset(verified,image,{fetcher:generationResponse({isFlower:false})}),e=>e.code==='not_flower');
-const alternate=await generateFlowerAsset(verified,image,{fetcher:generationResponse(spiderSVG)});assert.equal(asset.color,alternate.color);assert.notEqual(asset.svgHash,alternate.svgHash);assert.notEqual(asset.svgStats.paths,alternate.svgStats.paths);
-const emptyFragment={...lilySVG,svg:lilySVG.svg.replace('</svg>','<></svg>')};
-assert.throws(()=>sanitizeSVG(emptyFragment.svg),e=>e.code==='invalid_svg','The SVG parser itself must still reject malformed XML');
-assert.equal(sanitizeFlowerRecipe(emptyFragment).svg,sanitizeFlowerRecipe(lilySVG).svg,'Only empty model fragments between elements can be normalized without changing artwork');
-for(const fragment of ['<unexpected/>','<script/>','<g>','<path d="M1 1"'])assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,svg:lilySVG.svg.replace('</svg>',fragment+'</svg>')}),e=>e.code==='invalid_svg');
-console.log('PASS · Real system-role SVG instructions, image payload, verified vision gate and distinct authored vector outputs (mock provider)');
-// The classification request must finish successfully before a drawing request can exist.
+assert.deepEqual(SUBJECT_RESPONSE_FORMAT.json_schema.schema.properties.schemaVersion,{type:'integer'});
+console.log('PASS · MiniMax-only configuration, fixed Flash vision gate, image_generation payload, reference photo, raster output and key isolation');
 for(const assessment of [
  {...approved,mainSubject:'person',flowerIsPrimary:false},
  {...approved,mainSubject:'object',flowerPresent:false,flowerIsPrimary:false},
  {...approved,mainSubject:'landscape',flowerIsPrimary:false},
  {...approved,mainSubject:'unclear',confidence:.4,flowerIsPrimary:false},
- {...approved,confidence:.84},
- {...approved,confidence:'0.99'},
- {...approved,flowerIsPrimary:'true'},
- {...approved,confidence:Infinity},
- {...approved,reason:''},
- {...approved,unexpected:'field'},
- {isFlower:true},
+ {...approved,confidence:.84},{...approved,confidence:'0.99'},{...approved,flowerIsPrimary:'true'},
+ {...approved,multipleFlowers:'true'},{...approved,confidence:Infinity},{...approved,reason:''},{...approved,description:''},
+ {...approved,description:'花'.repeat(601)},{...approved,species:''},{...approved,unexpected:'field'},{isFlower:true},
 ]){
- let calls=0;await assert.rejects(generateFlowerAsset(verified,image,{fetcher:async()=>{calls++;return response(assessment);}}));assert.equal(calls,1,'Denied/uncertain/malformed photos never reach the SVG request');
+ let calls=0;await assert.rejects(generateFlowerAsset(verified,image,{fetcher:async url=>{calls++;assert(url.endsWith('/chat/completions'));return response(assessment);}}));assert.equal(calls,1,'Rejected photos never reach image_generation');
 }
-assert.throws(()=>sanitizeSubjectAssessment({...approved,mainSubject:'person'}),e=>e.code==='not_flower');
+assert.throws(()=>sanitizeSubjectAssessment({...approved,flowerPresent:false}),e=>e.code==='not_flower');
 assert.throws(()=>sanitizeSubjectAssessment({...approved,confidence:.84}),e=>e.code==='uncertain_subject');
+let unverifiedCalls=0;await assert.rejects(generateFlowerAsset({...verified},image,{fetcher:()=>unverifiedCalls++}),e=>e.code==='unverified');assert.equal(unverifiedCalls,0);
 const approval=await assessFlowerSubject(verified,image,{fetcher:async()=>response(approved)});assert(isApprovedSubject(approval,verified,image));assert(!isApprovedSubject({...approval},verified,image));assert(!isApprovedSubject(approval,verified,image+'A'));
-for(const wrong of [{...approval},approval]){
- let calls=0;await assert.rejects(generateFlowerAsset(verified,wrong===approval?image+'A':image,{approval:wrong,fetcher:async()=>{calls++;return response(lilySVG);}}),e=>e.code==='unverified_subject');assert.equal(calls,0);
+for(const [receipt,photo] of [[{...approval},image],[approval,image+'A']]){
+ let calls=0;await assert.rejects(generateFlowerAsset(verified,photo,{approval:receipt,fetcher:()=>calls++}),e=>e.code==='unverified_subject');assert.equal(calls,0);
 }
-let drawingCalls=0;await generateFlowerAsset(verified,image,{approval,fetcher:async()=>{drawingCalls++;return response(lilySVG);}});assert.equal(drawingCalls,1,'An image-bound approval avoids duplicate classification');
-const abortAfterCheck=new AbortController();let cancelCalls=0;
-await assert.rejects(generateFlowerAsset(verified,image,{signal:abortAfterCheck.signal,fetcher:async()=>{cancelCalls++;abortAfterCheck.abort();return response(approved);}}),e=>e.code==='aborted');assert.equal(cancelCalls,1);
-let unsupportedSchema=0;await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{const body=JSON.parse(options.body);unsupportedSchema++;if(unsupportedSchema===1){assert(body.response_format);return new Response(JSON.stringify({error:{message:'response_format json_schema is not supported'}}),{status:400});}assert(!body.response_format);return response(approved);}});assert.equal(unsupportedSchema,2);
-// Regression: MiniMax rejects numeric schema enums before invoking the model.
-for(const [baseUrl,model,effort] of [
- ['https://api.minimax.cn/v1','MiniMax-M3.1-Flash','medium'],
- ['https://api.minimax.io/v1','minimax-m3.1-flash','medium'],
- ['https://api.minimax.cn/v1','MiniMax-M3',undefined],
- ['https://vision.example.test/v1','MiniMax-M3.1-Flash',undefined],
- ['https://api.minimax.cn.example.test/v1','MiniMax-M3.1-Flash',undefined],
-])await verifyVision({...config,baseUrl,model},{challenge,fetcher:async(url,options)=>{const body=JSON.parse(options.body);assert.equal(body.reasoning_effort,effort);assert(!('thinking' in body));return response({items:expected});}});
-for(const format of [SUBJECT_RESPONSE_FORMAT,FLOWER_RESPONSE_FORMAT]){
- assert.deepEqual(format.json_schema.schema.properties.schemaVersion,{type:'integer'});
- for(const property of Object.values(format.json_schema.schema.properties))if(property.enum)assert(property.enum.every(value=>typeof value==='string'));
+const now=Date.now;try{Date.now=()=>now()+6*60*1000;assert(!isApprovedSubject(approval,verified,image));}finally{Date.now=now;}
+let draws=0;await generateFlowerAsset(verified,image,{approval,fetcher:async url=>{draws++;assert(url.endsWith('/image_generation'));return generated();}});assert.equal(draws,1,'Approval avoids duplicate classification');
+const aborter=new AbortController();let cancelCalls=0;
+await assert.rejects(generateFlowerAsset(verified,image,{signal:aborter.signal,fetcher:async()=>{cancelCalls++;aborter.abort();return response(approved);}}),e=>e.code==='aborted');assert.equal(cancelCalls,1);
+console.log('PASS · No-flower/person/background/uncertain rejection, no paid generation after rejection, receipt forgery/expiry/photo binding and cancellation');
+const bouquet={...approved,multipleFlowers:true,species:'玫瑰与雏菊',description:'三朵红玫瑰、五朵白色黄心雏菊，长茎与绿叶。'};
+const bundle=await generateFlowerAsset(verified,image,{fetcher:async(url,options)=>{
+ const body=JSON.parse(options.body);if(url.endsWith('/chat/completions'))return response(bouquet);
+ assert(body.prompt.includes(bouquet.description));assert(body.prompt.includes('ONE cohesive hand-tied bouquet'));assert(body.prompt.includes('ALL photographed flower varieties'));return generated();
+}});assert.equal(bundle.subjectAssessment.multipleFlowers,true);
+for(const color of ['#ffffff','#ff0000','#0000ff','#ff00ff','#00ffff']){
+ const matte=chooseMatteColor(color);assert.notEqual(matte,color);assert(/^#[a-f\d]{6}$/i.test(matte));
+ const prompt=buildImagePrompt({...bouquet,description:'花'.repeat(600)},matte);assert(prompt.length<=1500);assert(prompt.includes('10% empty margin'));assert(prompt.includes(matte));
 }
-const minimaxMismatch='invalid params, Mismatch type string with value number "at index 260: mismatched type with value: integer, enum:[1], mainSubject" (2013)';
+const liveConfig=await verifyVision({...config,imageModel:'image-01-live'},{challenge,fetcher:async()=>response({items:expected})});
+await generateFlowerAsset(liveConfig,image,{fetcher:async(url,options)=>{if(url.endsWith('/chat/completions'))return response(approved);assert.equal(JSON.parse(options.body).model,'image-01-live');return generated();}});
+console.log('PASS · Multiple flower varieties are requested in one bouquet; both MiniMax image models, matte contrast and prompt length limits');
+for(const status of [401,403,404,429,503]){
+ const code={401:'authentication',403:'permission',404:'not_found',429:'rate_limit',503:'provider'}[status];
+ await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>new Response(JSON.stringify({error:{message:config.apiKey}}),{status})}),e=>e.code===code&&!e.message.includes(config.apiKey));
+}
+for(const [service,code] of [[1004,'authentication'],[2049,'authentication'],[1002,'rate_limit'],[1008,'rate_limit']])await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>generated({base_resp:{status_code:service,status_msg:config.apiKey}})}),e=>e.code===code&&!e.message.includes(config.apiKey));
+let schemaCalls=0;await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{
+ const body=JSON.parse(options.body);if(++schemaCalls===1){assert(body.response_format);return new Response(JSON.stringify({error:{message:'response_format json_schema is not supported'}}),{status:400});}assert(!body.response_format);return response(approved);
+}});assert.equal(schemaCalls,2);
 for(const envelope of ['error','base_resp']){
  let calls=0;await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{
-  const body=JSON.parse(options.body);calls++;
-  if(calls===1){assert(body.response_format);return new Response(JSON.stringify(envelope==='error'?{error:{type:'bad_request_error',message:minimaxMismatch,http_code:'400'}}:{base_resp:{status_code:2013,status_msg:minimaxMismatch}}),{status:envelope==='error'?400:200});}
-  assert(!body.response_format);return response(approved);
+  if(++calls===1){const message='invalid params, Mismatch type string with value number at enum (2013)';return new Response(JSON.stringify(envelope==='error'?{error:{message}}:{base_resp:{status_code:2013,status_msg:message}}),{status:envelope==='error'?400:200});}
+  assert(!JSON.parse(options.body).response_format);return response(approved);
  }});assert.equal(calls,2);
 }
-let invalidSchemaCalls=0;
-await assessFlowerSubject(verified,image,{fetcher:async(url,options)=>{invalidSchemaCalls++;if(invalidSchemaCalls===1)return new Response(JSON.stringify({message:'Invalid parameter response_format.json_schema'}),{status:400});assert(!JSON.parse(options.body).response_format);return response(approved);}});assert.equal(invalidSchemaCalls,2);
-let unrelated400Calls=0;
-await assert.rejects(assessFlowerSubject(verified,image,{fetcher:async()=>{unrelated400Calls++;return new Response(JSON.stringify({error:{message:'invalid params: image too large '+config.apiKey+' (2013)',http_code:'400'}}),{status:400});}}),e=>e.stage==='subject_check'&&e.message.includes('花卉主体识别失败')&&e.message.includes('2013')&&!e.message.includes(config.apiKey));assert.equal(unrelated400Calls,1,'Unrelated 400 errors must not trigger schema fallback');
-await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({error:{message:'invalid params: max_completion_tokens exceeds maximum (2013)'}}),{status:400})}),e=>e.stage==='svg_generation'&&e.code==='token_limit'&&e.message.includes('SVG 绘制失败'));
-await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({choices:[{message:{content:'{"svg":"<svg fill="pink"/>"}'}}]}))}),e=>e.stage==='svg_generation'&&e.code==='invalid_response'&&e.message.includes('SVG 绘制失败'));
-await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>new Response(JSON.stringify({base_resp:{status_code:1004,status_msg:'not authorized '+config.apiKey}}),{status:200})}),e=>e.code==='authentication'&&!e.message.includes(config.apiKey));
-console.log('PASS · MiniMax numeric-enum regression, 2013 error envelopes, bounded schema fallback, per-stage diagnostics and redaction');
-let paidInvalid=0;await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>{paidInvalid++;return response({...lilySVG,svg:'broken'});}}),e=>e.code==='invalid_svg');assert.equal(paidInvalid,1,'Successful invalid output is not automatically billed again');
-await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content:'{"schemaVersion":1'}}]}))}),e=>e.code==='truncated');
-assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,schemaVersion:2}),e=>e.code==='invalid_response');assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,extra:1}),e=>e.code==='invalid_response');assert.throws(()=>parseModelJSON('Here is the result {"ok":true}'));
-console.log('PASS · Main-subject gate, background flowers, uncertainty, forged/cross-image approvals, cancellation, strict schemas and explicit compatibility fallback');
-const wrap=inner=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600">${inner}</svg>`;
-for(const bad of [
- wrap('<script>alert(1)</script>'),wrap('<foreignObject><p>bad</p></foreignObject>'),wrap('<image href="https://example.test/a.png"/>'),wrap('<path d="M0 0L30 30" onload="alert(1)"/>'),wrap('<path d="M0 0L30 30" style="fill:red"/>'),
- wrap('<path d="M0 0L30 30" fill="url(https://example.test/a)"/>'),wrap('<path d="M0 0L30 30" fill="url(&#104;ttps://example.test/a)"/>'),wrap('<use href="#loop" id="loop"/>'),wrap('<path d="M0 0L30 30" fill="url(#missing)"/>'),
- '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'+wrap('<path d="M0 0L3 3"/>'),wrap('<path d="M0 0L1e999 2"/>'),wrap('<path d="M0 0L3 3"></g>'),wrap('<path id="same" d="M0 0L3 3"/><path id="same" d="M0 0L3 3"/>'),
- wrap('<path d="M0 0L3 3" fill="red" fill="blue"/>'),wrap('<path d="M0 0C10 20 30"/>'),wrap('<path d="M0,,0L10 20"/>'),wrap('<path d="M0 0A2 2 0 .0 0 20 20"/>'),wrap('<path d="M0 0A2 2 0 3 0 20 20"/>'),wrap('<path d="M0 0L10 20" transform="matrix(1 2)"/>'),wrap('<path d="M0 0L10 20" opacity="oops"/>'),wrap('<circle cx="20" cy="20" r="-5"/>'),wrap('<path d="M0 0L3 3"><path d="M2 2L4 4"/></path>'),wrap('<defs><path d="M0 0L3 3"/></defs>'),wrap('<path id="shape" d="M0 0L3 3"/><path d="M0 0L3 3" fill="url(#shape)"/>'),wrap('<animate attributeName="opacity"/>'),wrap('<path d="M0 0L3 3"/><svg viewBox="0 0 20 20"/>'),
-])assert.throws(()=>sanitizeSVG(bad));
-assert.throws(()=>sanitizeFlowerRecipe({...lilySVG,svg:wrap('<circle cx="240" cy="220" r="50"/>')}),e=>e.code==='invalid_svg');
-for(const type of ['peony','tulip','daisy'])assert.throws(()=>sanitizeFlowerRecipe({isFlower:true,flower:{type,color:'#d99aae'}}));
-assert.equal(inspectSVG(sanitizeSVG(lilySVG.svg,{detailed:true})).paths,asset.svgStats.paths);
-const echoed=await generateFlowerAsset(verified,image,{fetcher:generationResponse({...lilySVG,name:config.apiKey})});assert(!JSON.stringify(echoed).includes(config.apiKey));
-console.log('PASS · Detail threshold, malformed XML, scripts, external resources, embedded images, CSS, events, entities, recursive references and secret redaction');
-let attempts=0;
-await verifyVision(config,{challenge,fetcher:async(url,options)=>{const body=JSON.parse(options.body);if(++attempts===1){assert(body.max_completion_tokens);return new Response(JSON.stringify({error:{message:'Unknown parameter max_completion_tokens'}}),{status:400});}assert(body.max_tokens);assert(!body.max_completion_tokens);return response({items:expected});}});assert.equal(attempts,2);
-const models=await readModelCatalog(config,{fetcher:async()=>new Response(JSON.stringify({data:[{id:'text-only',input_modalities:['text']},{id:'vision',input_modalities:['text','image']},{id:'unknown'}]}))});assert.deepEqual(models,['unknown','vision']);
-for(const [status,code] of [[401,'authentication'],[403,'permission'],[404,'not_found'],[429,'rate_limit'],[503,'provider']])await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>new Response(JSON.stringify({error:{message:config.apiKey}}),{status})}),e=>e.code===code&&!e.message.includes(config.apiKey));
+let imageCalls=0;await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>{imageCalls++;return new Response(JSON.stringify({error:{message:'response_format is unsupported '+config.apiKey}}),{status:400});}}),e=>e.stage==='image_generation'&&!e.message.includes(config.apiKey));assert.equal(imageCalls,1,'Image response format never uses chat schema fallback');
+let unrelatedCalls=0;await assert.rejects(assessFlowerSubject(verified,image,{fetcher:async()=>{unrelatedCalls++;return new Response(JSON.stringify({error:{message:'invalid image '+config.apiKey+' (2013)'}}),{status:400});}}),e=>e.stage==='subject_check'&&e.message.includes('2013')&&!e.message.includes(config.apiKey));assert.equal(unrelatedCalls,1);
+let paidCalls=0;await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>{paidCalls++;return generated({data:{image_base64:['broken']}});}}),e=>e.code==='invalid_image');assert.equal(paidCalls,1,'Paid invalid output never triggers another generation');
+await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>generated({data:{},metadata:{failed_count:1}})}),e=>e.code==='refusal');
+await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>generated({data:{}})}),e=>e.code==='invalid_response');
+await assert.rejects(assessFlowerSubject(verified,image,{fetcher:async()=>new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content:'{}'}}]}))}),e=>e.code==='truncated');
+await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>response({items:[]})}),e=>e.code==='no_vision');
 await assert.rejects(verifyVision(config,{challenge,fetcher:async()=>{throw new TypeError(config.apiKey);}}),e=>e.code==='network'&&!e.message.includes(config.apiKey));
-const waiting=async(url,{signal})=>new Promise((resolve,reject)=>{if(signal.aborted)return reject(new DOMException('Aborted','AbortError'));signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});});
-await assert.rejects(verifyVision(config,{challenge,timeout:5,fetcher:waiting}),e=>e.code==='timeout');const controller=new AbortController();controller.abort();await assert.rejects(verifyVision(config,{challenge,signal:controller.signal,fetcher:waiting}),e=>e.code==='aborted');
-console.log('PASS · Endpoint compatibility, model filtering, authentication, rate limits, timeout, cancellation and network errors');
-console.log('No real key or paid API call used. Live SVG quality depends on the configured vision model.');
+const waiting=async(url,{signal})=>new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});});
+await assert.rejects(verifyVision(config,{challenge,timeout:5,fetcher:waiting}),e=>e.code==='timeout');
+const preabort=new AbortController();preabort.abort();let preabortCalls=0;await assert.rejects(verifyVision(config,{challenge,signal:preabort.signal,fetcher:()=>preabortCalls++}),e=>e.code==='aborted');assert.equal(preabortCalls,0);
+let attempts=0;await verifyVision(config,{challenge,fetcher:async(url,options)=>{const body=JSON.parse(options.body);if(++attempts===1)return new Response(JSON.stringify({error:{message:'Unknown parameter max_completion_tokens'}}),{status:400});assert(body.max_tokens);assert(!body.max_completion_tokens);return response({items:expected});}});assert.equal(attempts,2);
+console.log('PASS · MiniMax service errors, redaction, bounded schema/token compatibility, paid-output no-retry, timeout and aborted requests');
+assert.equal(imageDataURL(jpeg),'data:image/jpeg;base64,'+jpeg);
+assert.throws(()=>imageDataURL('data:image/svg+xml;base64,PHN2Zz4='));
+for(const link of ['http://cdn.example.test/image.jpg','javascript:bad','https://user:secret@cdn.example.test/image.jpg'])await assert.rejects(generateFlowerAsset(verified,image,{approval,fetcher:async()=>generated({data:{image_urls:[link]}})}));
+let downloads=0;const downloaded=await generateFlowerAsset(verified,image,{approval,fetcher:async(url,options)=>{
+ if(String(url).endsWith('/image_generation'))return generated({data:{image_urls:['https://cdn.example.test/generated.jpg']}});
+ downloads++;assert.equal(options.headers,undefined);assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');return new Response(Buffer.from(jpeg,'base64'));
+}});assert.equal(downloads,1);assert(downloaded.generatedImage.startsWith('data:image/jpeg;base64,'));assert(!JSON.stringify(downloaded).includes('cdn.example'));
+console.log('PASS · Base64/URL response handling, HTTPS-only download, no credentials to image CDN and no expiring URL persisted');
+// Exercise the same pixel routine used by Canvas with pale petals, dark leaves,
+// an enclosed background gap, feathering, and a detached petal artifact.
+const width=100,height=140,pixels=new Uint8ClampedArray(width*height*4);
+for(let i=0;i<pixels.length;i+=4)pixels.set([0,255,255,255],i);
+const rect=(x,y,w,h,color)=>{for(let row=y;row<y+h;row++)for(let col=x;col<x+w;col++)pixels.set(color,(row*width+col)*4);};
+rect(22,25,56,45,[255,248,244,255]);rect(47,65,6,48,[66,112,48,255]);rect(30,75,20,12,[80,120,52,255]);rect(45,42,7,7,[0,255,255,255]);rect(78,120,3,3,[245,193,201,255]);rect(21,35,1,10,[120,250,250,255]);
+const cutout=removeMattePixels(pixels,width,height,'#00ffff');assert.deepEqual(cutout.bounds,[21,25,77,112]);
+for(const bounds of [cutout.bounds,[50,180,800,990],[230,3,239,299]]){const {target:[x,y,w,h]}=centeredFlowerRect(bounds);assert(Math.abs(x+w/2-432)<.01);assert(Math.abs(y+h/2-576)<.01);assert(x>=864*.079&&y>=1152*.079);}
+assert.equal(cutout.pixels[3],0);assert.equal(cutout.pixels[(45*width+48)*4+3],0);assert.equal(cutout.pixels[(120*width+78)*4+3],0);assert.equal(cutout.pixels[(30*width+30)*4+3],255);assert(cutout.pixels[(35*width+21)*4+3]>0&&cutout.pixels[(35*width+21)*4+3]<255);
+assert(pixels[3]===255,'Original pixels are not mutated');assert(cutout.transparentPixels>width*height*.6);
+const transparent=removeMattePixels(cutout.pixels,width,height,'#00ffff');assert.deepEqual(transparent.bounds,cutout.bounds);
+const empty=new Uint8ClampedArray(width*height*4);assert.throws(()=>removeMattePixels(empty,width,height,'#00ffff'));
+const scene=new Uint8ClampedArray(pixels);for(let i=0;i<scene.length;i+=4)scene.set([248,241,226,255],i);assert.throws(()=>removeMattePixels(scene,width,height,'#00ffff'));
+assert.throws(()=>removeMattePixels(pixels,width,height,'invalid'));
+const record={type:'image',image:'data:image/png;base64,iVBORw0KGgo='};assert(isFlowerImage(record));assert.equal(getThumbnail(record),record.image);assert.throws(()=>getFlowerSVG(record));assert(!isFlowerImage({...record,image:'https://cdn.example.test/expired.png'}));
+console.log('PASS · Transparent alpha, white petal/green leaf preservation, interior gaps, edge feathering, detached artifacts, blank/scene rejection and image gallery path');
+const wrap=inner=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600">${inner}</svg>`;
+for(const bad of [wrap('<script/>'),wrap('<foreignObject/>'),wrap('<image href="https://example.test/a.png"/>'),wrap('<path d="M0 0L30 30" onload="bad()"/>'),wrap('<path d="M0 0L30 30" fill="url(https://example.test/a)"/>'),wrap('<path d="M0 0L1e999 2"/>'),wrap('<path d="M0 0C10 20 30"/>'),wrap('<path d="M0 0L30 30" style="fill:red"/>')])assert.throws(()=>sanitizeSVG(bad));
+console.log('PASS · Existing SVG collections retain strict rendering security');
+console.log('All mock checks passed. No real API key or paid call is used by this suite.');
